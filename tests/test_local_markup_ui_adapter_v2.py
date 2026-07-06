@@ -6,7 +6,7 @@ def test_ui_state_for_recolor():
     assert state.mode == "inpaint"
     assert state.detection_prompt == "shirt"
     assert "black" in state.inpaint_prompt
-    assert "Action: recolor" in state.summary
+    assert "Change a color" in state.summary
 
 
 def test_ui_state_default_target():
@@ -16,8 +16,8 @@ def test_ui_state_default_target():
 
 
 def test_ui_outputs_order():
-    prompt, detection, summary, negative = build_markup_ui_outputs("remove the trash on the table")
-    assert "trash" in prompt
-    assert detection in {"table", "trash"}
-    assert "remove" in summary
+    prompt, detection, summary, negative = build_markup_ui_outputs("remove the clutter on the table")
+    assert "clutter" in prompt
+    assert detection in {"clutter", "table"}
+    assert "Remove something" in summary
     assert "artifacts" in negative
