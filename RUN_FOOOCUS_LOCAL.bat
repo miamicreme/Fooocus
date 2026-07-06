@@ -4,11 +4,14 @@ cd /d %~dp0
 
 set PYTHON_CMD=python
 if exist ".venv\Scripts\python.exe" set PYTHON_CMD=.venv\Scripts\python.exe
+set GRADIO_ANALYTICS_ENABLED=False
+set GRADIO_VERSION_CHECK=False
 
 echo Starting Fooocus locally...
 echo Using: %PYTHON_CMD%
+echo Gradio is intentionally pinned for Fooocus compatibility.
 echo.
-%PYTHON_CMD% launch.py --disable-analytics
+%PYTHON_CMD% launch.py --disable-analytics --listen
 echo.
 echo Fooocus stopped. Press any key to close.
 pause >nul
