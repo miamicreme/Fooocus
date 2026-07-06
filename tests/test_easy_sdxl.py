@@ -1,4 +1,5 @@
 from local_markup.easy_sdxl import build_easy_sdxl_outputs, build_easy_sdxl_plan
+from local_markup.style_explainer import describe_style_markdown, style_recommendations_for_goal
 
 
 def test_easy_sdxl_edit_plan_keeps_sdxl_concepts():
@@ -35,3 +36,26 @@ def test_headshot_instruction_produces_exact_edit_guidance():
     assert "glasses" in plan.detection_prompt
     assert "shirt" in plan.detection_prompt
     assert "Do not mask the whole face" in plan.mask_tip
+
+
+def test_remove_jacket_instruction_has_jacket_target():
+    plan = build_easy_sdxl_plan(
+        "Edit This Image",
+        "Shirt / Clothes",
+        "Remove only the jacket and replace with a clean professional shirt",
+    )
+    assert "shirt" in plan.detection_prompt
+    assert "same person" in plan.inpaint_prompt
+    assert "professional realistic headshot" in plan.inpaint_prompt
+
+
+def test_style_explainer_returns_expectation_and_preview():
+    markdown = describe_style_markdown("Fooocus Photograph", "professional realistic headshot")
+    assert "Expectation" in markdown
+    assert "Positive style effect" in markdown
+
+
+def test_style_recommendations_for_headshot():
+    recs = style_recommendations_for_goal("professional headshot")
+    assert "Fooocus Photograph" in recs
+    assert "Random Style" in recs
