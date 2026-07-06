@@ -14,11 +14,22 @@ HELPER = r'''
 # EASY_SDXL_WEBUI_HELPER_START
 def easy_sdxl_webui_plan(instruction, goal):
     from local_markup.easy_sdxl import build_easy_sdxl_outputs
+    from local_markup.photo_bundle import build_bundle_plan
     from local_markup.style_explainer import style_recommendations_for_goal
 
     text = (instruction or "").strip()
     if not text:
         text = "Remove only the jacket. Keep the same person, same face, same pose, and same background. Replace the jacket area with a clean professional shirt."
+
+    if goal == "Swimming / resort bundle":
+        plan = build_bundle_plan("Swimming / Resort", "swimwear", text or "make me standing near a pool ready for swimming")
+        guide = plan.as_text()
+        return plan.identity_prompt, "", "", plan.negative_prompt, guide, True, True
+
+    if goal == "Stand up full-body":
+        plan = build_bundle_plan("Lifestyle Starter", "casual", text or "standing full-body realistic portrait")
+        guide = plan.as_text()
+        return plan.identity_prompt, "", "", plan.negative_prompt, guide, True, True
 
     area = "Shirt / Clothes"
     if goal == "Remove glasses":
@@ -27,6 +38,9 @@ def easy_sdxl_webui_plan(instruction, goal):
         area = "Background"
     elif goal == "Improve face/headshot":
         area = "Face"
+    elif goal == "Swimwear outfit":
+        area = "Shirt / Clothes"
+        text = text or "replace clothing with tasteful swim trunks suitable for swimming, non-explicit, natural fit"
 
     positive, inpaint, detection, negative, settings, checklist = build_easy_sdxl_outputs("Edit This Image", area, text)
 
@@ -34,9 +48,14 @@ def easy_sdxl_webui_plan(instruction, goal):
         detection = "jacket, suit jacket, blazer, coat"
         inpaint = "same person, preserve facial identity, age, skin tone, expression, camera angle, and lighting, remove only the jacket, replace the jacket area with a clean professional shirt, professional realistic headshot, seamless edit, natural fabric texture, no visible retouching artifacts"
         positive = inpaint
+    elif goal == "Swimwear outfit":
+        detection = "shirt, jacket, clothing, outfit"
+        inpaint = "same adult person, preserve facial identity, age, skin tone, face shape, expression, camera angle, and lighting, wearing tasteful swim trunks suitable for swimming, beach or pool ready, non-explicit, natural fit, realistic body proportions, professional realistic lifestyle photo, seamless clothing edit"
+        positive = inpaint
+        negative = negative + ", nude, explicit nudity, see-through clothing, sexualized pose"
 
     guide = (
-        "Easy SDXL plan ready. Use Inpaint or Outpaint. "
+        "Easy SDXL plan ready. Use Inpaint or Outpaint for exact edits. "
         "Upload the image, enable Advanced Masking Features, use SAM, click Generate mask from image, review the mask, then Generate.\n\n"
         + checklist
         + "\n\nStyle advice:\n"
@@ -48,21 +67,21 @@ def easy_sdxl_webui_plan(instruction, goal):
 
 PANEL = r'''
                     # EASY_SDXL_WEBUI_PANEL_START
-                    with gr.Accordion("Easy SDXL Exact Edit", open=True):
-                        gr.Markdown("One place for exact edits. This writes directly into Fooocus prompt, inpaint prompt, negative prompt, and SAM detection prompt.")
+                    with gr.Accordion("Easy SDXL Exact Edit + Photo Bundle", open=True):
+                        gr.Markdown("One place for exact edits and safe personal photo bundles. This writes directly into Fooocus prompt, inpaint prompt, negative prompt, and SAM detection prompt.")
                         with gr.Row():
                             easy_sdxl_goal = gr.Radio(
-                                label="One-click edit goal",
-                                choices=["Remove jacket", "Remove glasses", "Change clothing", "Change background", "Improve face/headshot"],
+                                label="One-click goal",
+                                choices=["Remove jacket", "Remove glasses", "Change clothing", "Swimwear outfit", "Stand up full-body", "Swimming / resort bundle", "Change background", "Improve face/headshot"],
                                 value="Remove jacket",
                             )
                             easy_sdxl_instruction = gr.Textbox(
-                                label="Plain-English edit",
+                                label="Plain-English edit or bundle goal",
                                 value="Remove only the jacket. Keep the same person, same face, same pose, same background, and replace the jacket area with a clean professional shirt.",
                                 lines=3,
                             )
-                        easy_sdxl_apply = gr.Button(value="Plan Exact Edit", variant="primary")
-                        easy_sdxl_guide = gr.Textbox(label="Exact edit guide and style expectations", lines=10, interactive=False)
+                        easy_sdxl_apply = gr.Button(value="Plan Exact Edit / Bundle", variant="primary")
+                        easy_sdxl_guide = gr.Textbox(label="Exact edit guide, bundle plan, and style expectations", lines=12, interactive=False)
                     # EASY_SDXL_WEBUI_PANEL_END
 '''
 
@@ -108,7 +127,6 @@ def main():
     text = WEBUI.read_text(encoding="utf-8")
     changed = False
 
-    # Always repair existing generated blocks. Older patcher versions could write unsafe newlines.
     text, did_replace = replace_marked_block(text, HELPER_START, HELPER_END, HELPER)
     changed = changed or did_replace
     text, did_replace = replace_marked_block(text, PANEL_START, PANEL_END, PANEL)
