@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .ui_adapter_v2 import build_markup_ui_state
 
@@ -17,11 +17,11 @@ WORKFLOW_COPY = {
     },
     "Edit This Image": {
         "tab": "Inpaint or Outpaint",
-        "prompt_prefix": "Replace only the masked area with",
+        "prompt_prefix": "Change only the masked area to",
         "steps": "30 / 15",
         "cfg": "4",
         "denoise": "0.75 to 1.0",
-        "help": "Use this when you want to change part of an uploaded image. Draw a mask over the part to change.",
+        "help": "Use this when you want to change part of an uploaded image. Draw a mask over only the part to change.",
     },
     "Use Image as Reference": {
         "tab": "Image Prompt",
@@ -29,7 +29,7 @@ WORKFLOW_COPY = {
         "steps": "30",
         "cfg": "4",
         "denoise": "n/a",
-        "help": "Use this when you want a new image inspired by an uploaded reference image.",
+        "help": "Use this when you want a new image inspired by an uploaded reference image, not an exact edit.",
     },
     "Improve / Enhance": {
         "tab": "Enhance",
@@ -65,10 +65,89 @@ class EasySdxlPlan:
     steps: str
     cfg: str
     denoise: str
+    mask_tip: str
     checklist: str
 
     def to_dict(self) -> Dict[str, str]:
         return asdict(self)
+
+
+def _instruction_tokens(text: str) -> str:
+    return (text or "").strip().lower()
+
+
+def _infer_targets(area: str, instruction: str, fallback: str) -> List[str]:
+    text = _instruction_tokens(instruction)
+    targets: List[str] = []
+
+    if area in AREA_HINTS and AREA_HINTS[area] != "selected area":
+        targets.extend([part.strip() for part in AREA_HINTS[area].split(",")])
+
+    keyword_targets = [
+        ("glasses", ["glasses", "eyeglasses", "spectacles"]),
+        ("shirt", ["shirt", "polo", "suit", "jacket", "tie", "clothes", "clothing", "outfit"]),
+        ("face", ["face", "smile", "eyes", "skin", "head"]),
+        ("hair", ["hair", "bald", "beard"]),
+        ("background", ["background", "backdrop", "wall", "office", "street"]),
+    ]
+
+    for target, keywords in keyword_targets:
+        if any(keyword in text for keyword in keywords):
+            targets.append(target)
+
+    if not targets and fallback:
+        targets.extend([part.strip() for part in fallback.split(",") if part.strip()])
+
+    deduped: List[str] = []
+    for target in targets:
+        if target and target not in deduped:
+            deduped.append(target)
+    return deduped or ["selected area"]
+
+
+def _detection_prompt(targets: List[str]) -> str:
+    cleaned = [target for target in targets if target and target != "selected area"]
+    return ", ".join(cleaned) if cleaned else "selected area"
+
+
+def _portrait_edit_prompt(instruction: str, targets: List[str]) -> str:
+    text = _instruction_tokens(instruction)
+    prompt_bits = [
+        "same person",
+        "preserve facial identity, age, skin tone, expression, camera angle, and lighting",
+    ]
+
+    if "glasses" in targets and any(word in text for word in ["remove", "without", "no "]):
+        prompt_bits.append("without glasses")
+
+    if "shirt" in targets:
+        if "polo" in text:
+            if "navy" in text or "blue" in text:
+                prompt_bits.append("wearing a clean navy blue polo shirt")
+            else:
+                prompt_bits.append("wearing a clean polo shirt")
+        elif "suit" in text and any(word in text for word in ["remove", "change", "replace"]):
+            prompt_bits.append("replace suit jacket and tie with clean casual professional shirt")
+        else:
+            prompt_bits.append(instruction)
+    elif instruction:
+        prompt_bits.append(instruction)
+
+    prompt_bits.extend([
+        "professional realistic headshot",
+        "natural fabric texture",
+        "seamless edit",
+        "no visible retouching artifacts",
+    ])
+    return ", ".join(prompt_bits)
+
+
+def _negative_prompt(workflow: str, negative_prompt: str) -> str:
+    base = negative_prompt or "artifacts, distorted details, warped edges, blurry, low quality, unnatural shadows"
+    if workflow == "Edit This Image":
+        additions = "changed identity, different person, deformed face, melted glasses, distorted eyes, extra collar, bad clothing seams"
+        return f"{base}, {additions}"
+    return base
 
 
 def build_easy_sdxl_plan(
@@ -86,24 +165,33 @@ def build_easy_sdxl_plan(
         instruction = "describe the change you want"
 
     state = build_markup_ui_state(instruction, image_context=image_context)
-    area_hint = AREA_HINTS[area]
+    targets = _infer_targets(area, instruction, state.detection_prompt)
+    detection = _detection_prompt(targets)
 
     if workflow == "Generate New Image":
         positive = f"{workflow_info['prompt_prefix']} {instruction}, high quality, detailed, sharp, professional"
         inpaint_prompt = ""
-        detection = ""
     elif workflow == "Use Image as Reference":
         positive = f"{workflow_info['prompt_prefix']} {instruction}, high quality, detailed, sharp, professional"
         inpaint_prompt = ""
-        detection = area_hint
     elif workflow == "Improve / Enhance":
         positive = f"{workflow_info['prompt_prefix']} {instruction}, natural details, clean lighting, sharp focus"
-        inpaint_prompt = state.inpaint_prompt
-        detection = area_hint if area != "I will draw the mask" else state.detection_prompt
+        inpaint_prompt = _portrait_edit_prompt(instruction, targets)
     else:
-        positive = state.inpaint_prompt
-        inpaint_prompt = state.inpaint_prompt
-        detection = area_hint if area != "I will draw the mask" else state.detection_prompt
+        positive = _portrait_edit_prompt(instruction, targets)
+        inpaint_prompt = positive
+
+    if workflow == "Edit This Image":
+        mask_tip = (
+            "Paint the white mask only over the changed areas. For your headshot example, mask the glasses and the suit/tie/clothes. "
+            "Do not mask the whole face unless you want the face changed."
+        )
+    elif workflow == "Use Image as Reference":
+        mask_tip = "Do not use this for exact edits. Use this only when the reference image should inspire a new image."
+    elif workflow == "Improve / Enhance":
+        mask_tip = "Use low denoise when preserving identity matters. Only mask details that need cleanup."
+    else:
+        mask_tip = "No mask needed. This creates a new image from the prompt."
 
     checklist = (
         f"Recommended workflow: {workflow}\n"
@@ -111,9 +199,10 @@ def build_easy_sdxl_plan(
         f"What it means: {workflow_info['help']}\n\n"
         "Do this next:\n"
         f"1. Go to: {workflow_info['tab']}\n"
-        f"2. Area to change/detect: {detection or area_hint}\n"
-        "3. Use the generated prompt below.\n"
-        "4. Keep Advanced available for CFG, steps, denoise, seed, styles, and LoRAs."
+        f"2. Area to change/detect: {detection}\n"
+        f"3. Mask tip: {mask_tip}\n"
+        "4. Use the generated prompt below.\n"
+        "5. Keep Advanced available for CFG, steps, denoise, seed, styles, and LoRAs."
     )
 
     return EasySdxlPlan(
@@ -122,10 +211,11 @@ def build_easy_sdxl_plan(
         positive_prompt=positive,
         inpaint_prompt=inpaint_prompt,
         detection_prompt=detection,
-        negative_prompt=state.negative_prompt,
+        negative_prompt=_negative_prompt(workflow, state.negative_prompt),
         steps=workflow_info["steps"],
         cfg=workflow_info["cfg"],
         denoise=workflow_info["denoise"],
+        mask_tip=mask_tip,
         checklist=checklist,
     )
 
