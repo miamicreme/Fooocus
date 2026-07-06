@@ -2,6 +2,7 @@ import gradio as gr
 
 from local_markup.easy_sdxl import build_easy_sdxl_outputs
 from local_markup.gradio_helpers import build_markup_ui_outputs
+from local_markup.photo_bundle import BUNDLE_PRESETS, SAFE_OUTFIT_MAP, build_bundle_outputs
 from local_markup.presets import PRESETS, get_preset
 from local_markup.style_explainer import describe_style_markdown, list_style_names, style_recommendations_for_goal
 
@@ -9,6 +10,8 @@ from local_markup.style_explainer import describe_style_markdown, list_style_nam
 WORKFLOWS = ["Generate New Image", "Edit This Image", "Use Image as Reference", "Improve / Enhance"]
 AREAS = ["Face", "Glasses", "Hair", "Shirt / Clothes", "Background", "Object", "Whole Image", "I will draw the mask"]
 STYLE_NAMES = list_style_names()
+BUNDLE_NAMES = list(BUNDLE_PRESETS.keys())
+OUTFIT_NAMES = list(SAFE_OUTFIT_MAP.keys())
 
 
 def plan_easy_sdxl(workflow, area, instruction):
@@ -47,6 +50,10 @@ def explain_style(style_name, sample_prompt):
 
 def recommend_styles(goal):
     return style_recommendations_for_goal(goal)
+
+
+def plan_photo_bundle(bundle, outfit, goal):
+    return build_bundle_outputs(bundle, outfit, goal)
 
 
 def understand_edit(instruction):
@@ -94,32 +101,27 @@ def build_app():
                 detection_prompt = gr.Textbox(label="Detection / mask prompt", lines=2)
                 negative_prompt = gr.Textbox(label="Negative prompt", lines=3)
 
-            plan_button.click(
-                plan_easy_sdxl,
-                inputs=[workflow, area, instruction],
-                outputs=[positive_prompt, inpaint_prompt, detection_prompt, negative_prompt, settings, checklist],
-                queue=False,
+            plan_button.click(plan_easy_sdxl, inputs=[workflow, area, instruction], outputs=[positive_prompt, inpaint_prompt, detection_prompt, negative_prompt, settings, checklist], queue=False)
+            headshot_button.click(headshot_polo_preset, outputs=[workflow, area, instruction], queue=False).then(plan_easy_sdxl, inputs=[workflow, area, instruction], outputs=[positive_prompt, inpaint_prompt, detection_prompt, negative_prompt, settings, checklist], queue=False)
+            jacket_button.click(remove_jacket_preset, outputs=[workflow, area, instruction], queue=False).then(build_one_click_recipe, inputs=[instruction], outputs=[positive_prompt, inpaint_prompt, detection_prompt, negative_prompt, settings, checklist], queue=False)
+
+        with gr.Tab("Photo Bundle Builder"):
+            gr.Markdown(
+                "### Build a safe personal image bundle from a few reference photos\n"
+                "Use this for standing portraits, swimming/resort images, business/casual sets, and lifestyle variations. "
+                "Swimwear is supported. Nudity or undressing generation is intentionally not supported."
             )
-            headshot_button.click(
-                headshot_polo_preset,
-                outputs=[workflow, area, instruction],
-                queue=False,
-            ).then(
-                plan_easy_sdxl,
-                inputs=[workflow, area, instruction],
-                outputs=[positive_prompt, inpaint_prompt, detection_prompt, negative_prompt, settings, checklist],
-                queue=False,
-            )
-            jacket_button.click(
-                remove_jacket_preset,
-                outputs=[workflow, area, instruction],
-                queue=False,
-            ).then(
-                build_one_click_recipe,
-                inputs=[instruction],
-                outputs=[positive_prompt, inpaint_prompt, detection_prompt, negative_prompt, settings, checklist],
-                queue=False,
-            )
+            with gr.Row():
+                with gr.Column():
+                    bundle = gr.Dropdown(label="Bundle type", choices=BUNDLE_NAMES, value="Swimming / Resort")
+                    outfit = gr.Dropdown(label="Safe outfit direction", choices=OUTFIT_NAMES, value="swimwear")
+                    bundle_goal = gr.Textbox(label="Goal", value="make me standing near a pool ready for swimming", lines=3)
+                    bundle_button = gr.Button("Build Photo Bundle Prompts", variant="primary")
+                with gr.Column():
+                    bundle_identity_prompt = gr.Textbox(label="Identity / main prompt", lines=5)
+                    bundle_negative_prompt = gr.Textbox(label="Negative prompt / safety guardrails", lines=5)
+            bundle_plan = gr.Textbox(label="Bundle shot list and expectations", lines=16)
+            bundle_button.click(plan_photo_bundle, inputs=[bundle, outfit, bundle_goal], outputs=[bundle_identity_prompt, bundle_negative_prompt, bundle_plan], queue=False)
 
         with gr.Tab("Style Expectations"):
             gr.Markdown(
