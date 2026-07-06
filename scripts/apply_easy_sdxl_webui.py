@@ -16,20 +16,119 @@ def easy_sdxl_webui_plan(instruction, goal):
     from local_markup.easy_sdxl import build_easy_sdxl_outputs
     from local_markup.photo_bundle import build_bundle_plan
     from local_markup.style_explainer import style_recommendations_for_goal
+    import modules.flags as _flags
 
     text = (instruction or "").strip()
     if not text:
         text = "Remove only the jacket. Keep the same person, same face, same pose, and same background. Replace the jacket area with a clean professional shirt."
 
+    # Default exact-edit values.
+    current_tab_value = "inpaint"
+    uov_value = _flags.disabled
+    inpaint_mode_value = _flags.inpaint_option_modify
+    advanced_mask_value = True
+    mask_model_value = "sam"
+    first_ip_type = _flags.default_ip
+    first_ip_stop = _flags.default_parameters[_flags.default_ip][0]
+    first_ip_weight = _flags.default_parameters[_flags.default_ip][1]
+
     if goal == "Swimming / resort bundle":
         plan = build_bundle_plan("Swimming / Resort", "swimwear", text or "make me standing near a pool ready for swimming")
-        guide = plan.as_text()
-        return plan.identity_prompt, "", "", plan.negative_prompt, guide, True, True
+        guide = plan.as_text() + "\n\nUse Image Prompt or FaceSwap with your reference photos for identity consistency."
+        return plan.identity_prompt, "", "", plan.negative_prompt, guide, True, current_tab_value, uov_value, inpaint_mode_value, advanced_mask_value, mask_model_value, first_ip_type, first_ip_stop, first_ip_weight
 
     if goal == "Stand up full-body":
         plan = build_bundle_plan("Lifestyle Starter", "casual", text or "standing full-body realistic portrait")
-        guide = plan.as_text()
-        return plan.identity_prompt, "", "", plan.negative_prompt, guide, True, True
+        guide = plan.as_text() + "\n\nBest workflow: Image Prompt with 2-5 references. A headshot alone can inspire a standing image, but full-body reference improves accuracy."
+        current_tab_value = "ip"
+        first_ip_type = _flags.cn_ip_face
+        first_ip_stop = _flags.default_parameters[_flags.cn_ip_face][0]
+        first_ip_weight = _flags.default_parameters[_flags.cn_ip_face][1]
+        return plan.identity_prompt, "", "", plan.negative_prompt, guide, True, current_tab_value, uov_value, inpaint_mode_value, advanced_mask_value, mask_model_value, first_ip_type, first_ip_stop, first_ip_weight
+
+    guided_map = {
+        "Image Prompt reference": {
+            "tab": "ip",
+            "ip_type": _flags.cn_ip,
+            "prompt": text or "create a new high-quality image inspired by the uploaded reference image",
+            "guide": "Upload the reference image in Image Prompt. This creates a new image inspired by the reference; it is not an exact edit.",
+        },
+        "FaceSwap identity reference": {
+            "tab": "ip",
+            "ip_type": _flags.cn_ip_face,
+            "prompt": text or "same adult person identity from the reference photo, realistic portrait, natural expression",
+            "guide": "Upload a clear face reference in Image Prompt. Type is set to FaceSwap for stronger identity preservation.",
+        },
+        "PyraCanny structure control": {
+            "tab": "ip",
+            "ip_type": _flags.cn_canny,
+            "prompt": text or "use the uploaded image structure and edges to guide a clean realistic result",
+            "guide": "Upload a structure reference. Type is set to PyraCanny, which follows edges/contours strongly.",
+        },
+        "CPDS composition control": {
+            "tab": "ip",
+            "ip_type": _flags.cn_cpds,
+            "prompt": text or "use the uploaded image composition and depth to guide a realistic result",
+            "guide": "Upload a composition reference. Type is set to CPDS, which follows composition/depth without copying every edge.",
+        },
+        "Upscale image": {
+            "tab": "uov",
+            "ip_type": _flags.default_ip,
+            "prompt": text or "improve the uploaded image quality, sharpness, and professional finish",
+            "guide": "Upload image in Upscale or Variation. Method is set to Upscale (2x). Use this when the image is good and you want it larger/cleaner.",
+            "uov": _flags.upscale_2,
+        },
+        "Subtle variation": {
+            "tab": "uov",
+            "ip_type": _flags.default_ip,
+            "prompt": text or "make a subtle realistic variation while preserving the original look",
+            "guide": "Upload image in Upscale or Variation. Method is set to Vary (Subtle). Use this for small changes.",
+            "uov": _flags.subtle_variation,
+        },
+        "Strong variation": {
+            "tab": "uov",
+            "ip_type": _flags.default_ip,
+            "prompt": text or "make a stronger creative variation inspired by the uploaded image",
+            "guide": "Upload image in Upscale or Variation. Method is set to Vary (Strong). Use this when you want a noticeably different version.",
+            "uov": _flags.strong_variation,
+        },
+        "Auto mask clothing": {
+            "tab": "inpaint",
+            "ip_type": _flags.default_ip,
+            "prompt": text or "same person, preserve face and background, edit only the masked clothing area, seamless realistic clothing edit",
+            "guide": "Use Inpaint. Upload image, enable Advanced Masking, model sam, detection prompt clothing/jacket/shirt, click Generate mask from image, review mask, then Generate.",
+            "detect": "jacket, shirt, clothing, outfit",
+        },
+        "Auto mask background": {
+            "tab": "inpaint",
+            "ip_type": _flags.default_ip,
+            "prompt": text or "same person, preserve face and body, replace only the background with a clean realistic background",
+            "guide": "Use Inpaint. Upload image, enable Advanced Masking, model sam, detection prompt background, generate mask, review, then Generate.",
+            "detect": "background",
+        },
+        "U2Net person/background mask": {
+            "tab": "inpaint",
+            "ip_type": _flags.default_ip,
+            "prompt": text or "clean realistic edit using automatic segmentation mask",
+            "guide": "Use Inpaint advanced masking with a U2Net-family model when you want broad person/background segmentation instead of text-directed SAM detection.",
+            "mask_model": "u2net_human_seg",
+            "detect": "",
+        },
+    }
+
+    if goal in guided_map:
+        item = guided_map[goal]
+        current_tab_value = item.get("tab", "ip")
+        uov_value = item.get("uov", _flags.disabled)
+        first_ip_type = item.get("ip_type", _flags.default_ip)
+        first_ip_stop = _flags.default_parameters.get(first_ip_type, _flags.default_parameters[_flags.default_ip])[0]
+        first_ip_weight = _flags.default_parameters.get(first_ip_type, _flags.default_parameters[_flags.default_ip])[1]
+        mask_model_value = item.get("mask_model", "sam")
+        detection = item.get("detect", "")
+        positive = item["prompt"]
+        negative = "changed identity, distorted face, bad hands, low quality, blurry, unrealistic anatomy, artifacts"
+        guide = item["guide"] + "\n\nTool selected: " + goal
+        return positive, positive if current_tab_value == "inpaint" else "", detection, negative, guide, True, current_tab_value, uov_value, inpaint_mode_value, advanced_mask_value, mask_model_value, first_ip_type, first_ip_stop, first_ip_weight
 
     area = "Shirt / Clothes"
     if goal == "Remove glasses":
@@ -52,7 +151,7 @@ def easy_sdxl_webui_plan(instruction, goal):
         detection = "shirt, jacket, clothing, outfit"
         inpaint = "same adult person, preserve facial identity, age, skin tone, face shape, expression, camera angle, and lighting, wearing tasteful swim trunks suitable for swimming, beach or pool ready, non-explicit, natural fit, realistic body proportions, professional realistic lifestyle photo, seamless clothing edit"
         positive = inpaint
-        negative = negative + ", nude, explicit nudity, see-through clothing, sexualized pose"
+        negative = negative + ", unsafe adult content, see-through clothing, sexualized pose"
 
     guide = (
         "Easy SDXL plan ready. Use Inpaint or Outpaint for exact edits. "
@@ -61,27 +160,33 @@ def easy_sdxl_webui_plan(instruction, goal):
         + "\n\nStyle advice:\n"
         + style_recommendations_for_goal(text)
     )
-    return positive, inpaint, detection, negative, guide, True, True
+    return positive, inpaint, detection, negative, guide, True, current_tab_value, uov_value, inpaint_mode_value, advanced_mask_value, mask_model_value, first_ip_type, first_ip_stop, first_ip_weight
 # EASY_SDXL_WEBUI_HELPER_END
 '''
 
 PANEL = r'''
                     # EASY_SDXL_WEBUI_PANEL_START
-                    with gr.Accordion("Easy SDXL Exact Edit + Photo Bundle", open=True):
-                        gr.Markdown("One place for exact edits and safe personal photo bundles. This writes directly into Fooocus prompt, inpaint prompt, negative prompt, and SAM detection prompt.")
+                    with gr.Accordion("Easy SDXL Exact Edit + Guided Image Tools", open=True):
+                        gr.Markdown("One place for exact edits, reference images, FaceSwap, structure controls, upscale/variation, auto masks, and safe personal photo bundles. This writes directly into Fooocus controls.")
                         with gr.Row():
                             easy_sdxl_goal = gr.Radio(
-                                label="One-click goal",
-                                choices=["Remove jacket", "Remove glasses", "Change clothing", "Swimwear outfit", "Stand up full-body", "Swimming / resort bundle", "Change background", "Improve face/headshot"],
+                                label="One-click goal / tool",
+                                choices=[
+                                    "Remove jacket", "Remove glasses", "Change clothing", "Swimwear outfit", "Stand up full-body", "Swimming / resort bundle",
+                                    "Image Prompt reference", "FaceSwap identity reference", "PyraCanny structure control", "CPDS composition control",
+                                    "Upscale image", "Subtle variation", "Strong variation",
+                                    "Auto mask clothing", "Auto mask background", "U2Net person/background mask",
+                                    "Change background", "Improve face/headshot"
+                                ],
                                 value="Remove jacket",
                             )
                             easy_sdxl_instruction = gr.Textbox(
-                                label="Plain-English edit or bundle goal",
+                                label="Plain-English edit, reference goal, or bundle goal",
                                 value="Remove only the jacket. Keep the same person, same face, same pose, same background, and replace the jacket area with a clean professional shirt.",
                                 lines=3,
                             )
-                        easy_sdxl_apply = gr.Button(value="Plan Exact Edit / Bundle", variant="primary")
-                        easy_sdxl_guide = gr.Textbox(label="Exact edit guide, bundle plan, and style expectations", lines=12, interactive=False)
+                        easy_sdxl_apply = gr.Button(value="Set Up Tool", variant="primary")
+                        easy_sdxl_guide = gr.Textbox(label="What this tool set up and what to do next", lines=12, interactive=False)
                     # EASY_SDXL_WEBUI_PANEL_END
 '''
 
@@ -97,7 +202,14 @@ BINDING = r'''
                 negative_prompt,
                 easy_sdxl_guide,
                 input_image_checkbox,
+                current_tab,
+                uov_method,
+                inpaint_mode,
                 inpaint_advanced_masking_checkbox,
+                inpaint_mask_model,
+                ip_types[0],
+                ip_stops[0],
+                ip_weights[0],
             ],
             queue=False,
             show_progress=False,
