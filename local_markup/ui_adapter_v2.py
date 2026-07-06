@@ -6,6 +6,19 @@ from typing import Dict, List, Optional
 from .planner import build_edit_intent
 
 
+ACTION_LABELS = {
+    "remove": "Remove something",
+    "recolor": "Change a color",
+    "replace": "Replace part of the image",
+    "enhance": "Improve the image",
+}
+
+MODE_LABELS = {
+    "inpaint": "Edit the selected area",
+    "enhance": "Improve the image",
+}
+
+
 @dataclass
 class MarkupUiState:
     inpaint_prompt: str
@@ -31,12 +44,21 @@ def target_to_detection_prompt(targets: List[str]) -> str:
 def build_markup_ui_state(user_instruction: str, image_context: Optional[str] = None) -> MarkupUiState:
     intent = build_edit_intent(user_instruction, image_context=image_context)
     target_text = ", ".join(intent.targets) if intent.targets else "selected area"
+    action_label = ACTION_LABELS.get(intent.action, intent.action)
+    mode_label = MODE_LABELS.get(intent.mode, intent.mode)
+    summary = (
+        "Edit plan:\n"
+        f"- Change: {action_label}\n"
+        f"- Area to change: {target_text}\n"
+        f"- Best tool: {mode_label}\n"
+        "- The edit prompt has been filled in. Draw or upload a mask around the area first."
+    )
     return MarkupUiState(
         inpaint_prompt=intent.prompt,
         negative_prompt=intent.negative_prompt,
         mode=intent.mode,
         detection_prompt=target_to_detection_prompt(intent.targets),
-        summary=f"Action: {intent.action} | Target: {target_text} | Suggested mode: {intent.mode}",
+        summary=summary,
         notes=intent.notes,
     )
 
