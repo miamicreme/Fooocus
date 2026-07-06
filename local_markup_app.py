@@ -3,10 +3,12 @@ import gradio as gr
 from local_markup.easy_sdxl import build_easy_sdxl_outputs
 from local_markup.gradio_helpers import build_markup_ui_outputs
 from local_markup.presets import PRESETS, get_preset
+from local_markup.style_explainer import describe_style_markdown, list_style_names, style_recommendations_for_goal
 
 
 WORKFLOWS = ["Generate New Image", "Edit This Image", "Use Image as Reference", "Improve / Enhance"]
 AREAS = ["Face", "Glasses", "Hair", "Shirt / Clothes", "Background", "Object", "Whole Image", "I will draw the mask"]
+STYLE_NAMES = list_style_names()
 
 
 def plan_easy_sdxl(workflow, area, instruction):
@@ -15,6 +17,36 @@ def plan_easy_sdxl(workflow, area, instruction):
 
 def headshot_polo_preset():
     return "Edit This Image", "Shirt / Clothes", "Remove glasses and change suit and tie to a clean navy blue polo shirt"
+
+
+def remove_jacket_preset():
+    return "Edit This Image", "Shirt / Clothes", "Remove only the jacket. Keep the same person, same face, same pose, same background, and replace the jacket area with a clean professional shirt."
+
+
+def build_one_click_recipe(instruction):
+    goal = instruction or "Remove only the jacket"
+    positive, inpaint, detection, negative, settings, checklist = build_easy_sdxl_outputs("Edit This Image", "Shirt / Clothes", goal)
+    recipe = (
+        "ONE-CLICK EXACT EDIT RECIPE\n\n"
+        "1. Fooocus tab: Inpaint or Outpaint\n"
+        "2. Enable Advanced Masking Features.\n"
+        "3. Mask generation model: sam\n"
+        "4. Detection prompt: jacket, suit jacket, blazer, coat\n"
+        "5. Click Generate mask from image.\n"
+        "6. Review mask. It should cover only the jacket/clothes area, not the face.\n"
+        "7. Paste the inpaint prompt below.\n"
+        "8. Generate.\n\n"
+        "Expected result: same headshot, same face, same lighting, jacket removed/replaced only in the masked clothing area."
+    )
+    return positive, inpaint, "jacket, suit jacket, blazer, coat", negative, settings, recipe
+
+
+def explain_style(style_name, sample_prompt):
+    return describe_style_markdown(style_name, sample_prompt)
+
+
+def recommend_styles(goal):
+    return style_recommendations_for_goal(goal)
 
 
 def understand_edit(instruction):
@@ -51,9 +83,10 @@ def build_app():
                     with gr.Row():
                         plan_button = gr.Button("Plan SDXL Settings", variant="primary")
                         headshot_button = gr.Button("Headshot: no glasses + polo")
+                        jacket_button = gr.Button("One-click recipe: remove jacket")
                 with gr.Column():
                     settings = gr.Textbox(label="Recommended SDXL settings", lines=4)
-                    checklist = gr.Textbox(label="What to do next in Fooocus", lines=10)
+                    checklist = gr.Textbox(label="What to do next in Fooocus", lines=12)
             with gr.Row():
                 positive_prompt = gr.Textbox(label="Main prompt", lines=4)
                 inpaint_prompt = gr.Textbox(label="Inpaint prompt", lines=4)
@@ -77,6 +110,34 @@ def build_app():
                 outputs=[positive_prompt, inpaint_prompt, detection_prompt, negative_prompt, settings, checklist],
                 queue=False,
             )
+            jacket_button.click(
+                remove_jacket_preset,
+                outputs=[workflow, area, instruction],
+                queue=False,
+            ).then(
+                build_one_click_recipe,
+                inputs=[instruction],
+                outputs=[positive_prompt, inpaint_prompt, detection_prompt, negative_prompt, settings, checklist],
+                queue=False,
+            )
+
+        with gr.Tab("Style Expectations"):
+            gr.Markdown(
+                "### Know what each style is doing before you generate\n"
+                "Pick a style and preview the positive/negative style text that will affect your image."
+            )
+            with gr.Row():
+                with gr.Column():
+                    style_name = gr.Dropdown(label="Fooocus style", choices=STYLE_NAMES, value="Fooocus Photograph")
+                    style_goal = gr.Textbox(label="Your goal", value="professional realistic headshot", lines=2)
+                    with gr.Row():
+                        style_button = gr.Button("Explain Style", variant="primary")
+                        recommend_button = gr.Button("Recommend Styles")
+                with gr.Column():
+                    style_output = gr.Markdown()
+                    style_recs = gr.Textbox(label="Style recommendations", lines=8)
+            style_button.click(explain_style, inputs=[style_name, style_goal], outputs=style_output, queue=False)
+            recommend_button.click(recommend_styles, inputs=[style_goal], outputs=style_recs, queue=False)
 
         with gr.Tab("Classic Markup Assistant"):
             gr.Markdown("Use this when you only want a quick Fooocus inpaint prompt and a short edit plan.")
