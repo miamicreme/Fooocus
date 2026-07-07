@@ -1,6 +1,8 @@
 import gradio as gr
 
 from local_markup.ai_studio_agent import build_agent_outputs
+from local_markup.fooocus_feature_playbook import build_feature_reasoning
+from local_markup.fooocus_feature_catalog import list_features_markdown
 from local_markup.style_explainer import describe_style_markdown, list_style_names, style_recommendations_for_goal
 
 
@@ -15,30 +17,40 @@ def recommend_styles(goal):
     return style_recommendations_for_goal(goal or "realistic personal photo")
 
 
+def explain_feature_stack(goal, image_1, image_2, image_3, wants_identity, wants_exact_edit, wants_bundle):
+    image_count = sum(x is not None for x in [image_1, image_2, image_3])
+    return build_feature_reasoning(goal, image_count, wants_identity, wants_exact_edit, wants_bundle)
+
+
+def feature_catalog_markdown():
+    return list_features_markdown()
+
+
 def build_app():
     with gr.Blocks(title="AI Image Studio") as demo:
         gr.Markdown(
             "# AI Image Studio\n"
-            "A clean AI-assisted interface for Fooocus workflows. Upload images, describe the goal, and let the agent choose the right workflow before you generate."
+            "One source of truth for Fooocus. Upload images, describe the goal, and the Studio Agent chooses the workflow, feature stack, prompt, negative prompt, shot plan, and hand-off recipe."
         )
 
-        with gr.Tab("Agent Planner"):
+        with gr.Tab("Studio Agent"):
             with gr.Row():
                 with gr.Column(scale=1):
                     goal = gr.Textbox(
-                        label="Tell the agent what you want",
-                        placeholder="Example: make me standing in a resort photo wearing swim trunks, keep my face recognizable",
+                        label="What do you want?",
+                        placeholder="Example: make me standing full body near a resort pool, keep my face recognizable, realistic photo",
                         lines=5,
                     )
-                    wants_identity = gr.Checkbox(label="Preserve identity / same person", value=True)
-                    wants_exact_edit = gr.Checkbox(label="Exact edit of uploaded image", value=False)
-                    wants_bundle = gr.Checkbox(label="Build a bundle / photoshoot set", value=False)
-                    plan_btn = gr.Button("Ask Studio Agent", variant="primary")
+                    with gr.Accordion("Optional intent switches", open=False):
+                        wants_identity = gr.Checkbox(label="Preserve identity / same person", value=True)
+                        wants_exact_edit = gr.Checkbox(label="Exact edit of uploaded image", value=False)
+                        wants_bundle = gr.Checkbox(label="Build a bundle / photoshoot set", value=False)
+                    plan_btn = gr.Button("Plan Best Workflow", variant="primary")
 
                 with gr.Column(scale=1):
-                    image_1 = gr.Image(label="Reference image 1 - face/source", type="numpy")
-                    image_2 = gr.Image(label="Reference image 2 - upper body/style", type="numpy")
-                    image_3 = gr.Image(label="Reference image 3 - full body/pose", type="numpy")
+                    image_1 = gr.Image(label="Reference 1 - face/source", type="numpy")
+                    image_2 = gr.Image(label="Reference 2 - style/upper body", type="numpy")
+                    image_3 = gr.Image(label="Reference 3 - full body/pose", type="numpy")
 
             with gr.Row():
                 selected_tool = gr.Textbox(label="Selected tool", interactive=False)
@@ -46,7 +58,7 @@ def build_app():
 
             agent_plan = gr.Markdown(label="Agent plan")
             with gr.Row():
-                primary_prompt = gr.Textbox(label="Best first shot prompt - copy this to Fooocus first", lines=6)
+                primary_prompt = gr.Textbox(label="Best first shot prompt - use this first", lines=6)
                 negative_prompt = gr.Textbox(label="Negative prompt", lines=6)
             with gr.Row():
                 shot_prompts = gr.Textbox(label="Shot-by-shot prompt bundle", lines=12)
@@ -58,6 +70,22 @@ def build_app():
                 outputs=[agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area, shot_prompts, handoff_recipe],
                 queue=False,
             )
+
+        with gr.Tab("Feature Brain"):
+            gr.Markdown(
+                "## Feature Brain\n"
+                "This is the no-churn reasoning layer. It explains which Fooocus features the agent will use for the current scenario and why."
+            )
+            feature_btn = gr.Button("Explain Feature Stack", variant="primary")
+            feature_stack = gr.Markdown()
+            feature_btn.click(
+                explain_feature_stack,
+                inputs=[goal, image_1, image_2, image_3, wants_identity, wants_exact_edit, wants_bundle],
+                outputs=feature_stack,
+                queue=False,
+            )
+            with gr.Accordion("Full source-of-truth feature catalog", open=False):
+                catalog = gr.Markdown(value=feature_catalog_markdown())
 
         with gr.Tab("Style Coach"):
             gr.Markdown("Use this before generating to understand what a Fooocus style will do to the image.")
