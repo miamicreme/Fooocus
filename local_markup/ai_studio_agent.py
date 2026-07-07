@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
+from local_markup.fooocus_feature_playbook import build_feature_reasoning, build_scenario_summary
+
 
 WORKFLOW_LIBRARY: Dict[str, Dict[str, str]] = {
     "make new image": {
@@ -106,6 +108,8 @@ class AgentPlan:
     shot_prompts: List[str]
     best_first_shot: str
     handoff_recipe: str
+    scenario_summary: str
+    feature_reasoning: str
 
     def as_markdown(self) -> str:
         shot_text = "\n".join([f"{index + 1}. {prompt}" for index, prompt in enumerate(self.shot_prompts)])
@@ -115,6 +119,7 @@ class AgentPlan:
             f"**Selected workflow:** {self.selected_workflow}\n\n"
             f"**Tool:** {self.tool}\n\n"
             f"**Fooocus area:** {self.fooocus_tab}\n\n"
+            f"### Scenario summary\n{self.scenario_summary}\n\n"
             f"### Why this workflow\n{WORKFLOW_LIBRARY[self.selected_workflow]['why']}\n\n"
             f"### Reference strategy\n{self.reference_strategy}\n\n"
             f"### Mask strategy\n{self.mask_strategy}\n\n"
@@ -122,6 +127,7 @@ class AgentPlan:
             f"### Best first shot\n{self.best_first_shot}\n\n"
             f"### Shot prompts\n{shot_text}\n\n"
             f"### Fooocus hand-off recipe\n{self.handoff_recipe}\n\n"
+            f"### Feature reasoning\n{self.feature_reasoning}\n\n"
             f"### Next steps\n{self.next_steps}\n\n"
             f"### Warnings / guardrails\n{self.warnings}"
         )
@@ -257,6 +263,8 @@ def build_agent_plan(
     shot_prompts = build_shot_prompts(goal, workflow)
     primary_prompt = shot_prompts[0] if shot_prompts else build_prompt(goal, workflow)
     negative_prompt = build_negative_prompt(workflow)
+    scenario_summary = build_scenario_summary(goal, image_count, wants_identity, wants_exact_edit, wants_bundle)
+    feature_reasoning = build_feature_reasoning(goal, image_count, wants_identity, wants_exact_edit, wants_bundle)
     generation_settings = (
         "Performance: Speed for drafts, Quality for final.\n"
         "Image count: 2 candidates per shot.\n"
@@ -282,6 +290,8 @@ def build_agent_plan(
         shot_prompts=shot_prompts,
         best_first_shot=primary_prompt,
         handoff_recipe=build_handoff_recipe(workflow, image_count),
+        scenario_summary=scenario_summary,
+        feature_reasoning=feature_reasoning,
     )
 
 
