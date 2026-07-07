@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from local_markup.engine_phase1_cache import (
     LoraCacheKey,
     build_clip_cache_key,
@@ -12,7 +14,7 @@ from local_markup.engine_phase1_cache import (
 def test_lora_cache_key_uses_structured_fields() -> None:
     key = build_lora_cache_key("models/loras/example.safetensors", 0.75, "base.safetensors", mtime_ns=123)
 
-    assert key.path.endswith("models/loras/example.safetensors")
+    assert Path(key.path).parts[-3:] == ("models", "loras", "example.safetensors")
     assert key.weight == 0.75
     assert key.mtime_ns == 123
     assert key.base_model == "base.safetensors"
