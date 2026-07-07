@@ -50,6 +50,46 @@ WORKFLOW_LIBRARY: Dict[str, Dict[str, str]] = {
 }
 
 
+SHOT_PRESETS: Dict[str, List[str]] = {
+    "photo bundle": [
+        "standing full body near a modern resort pool, tasteful swimwear, relaxed confident posture, natural daylight, professional lifestyle photo",
+        "walking beside a beach or resort walkway, tasteful resort look, candid but polished, realistic proportions, warm daylight",
+        "upper body resort portrait near poolside seating, clean background, natural expression, realistic photography",
+        "professional social profile portrait outdoors, modern lifestyle setting, sharp details, natural skin texture",
+    ],
+    "keep identity": [
+        "single realistic portrait preserving identity, natural expression, professional lighting",
+        "standing full body realistic portrait preserving identity, natural posture, realistic proportions",
+        "upper body lifestyle photo preserving identity, clean background, sharp details",
+        "outdoor candid-style portrait preserving identity, natural daylight, realistic photography",
+    ],
+    "edit part of image": [
+        "exact edit of the selected masked area only, preserve every unmasked area, seamless realistic result",
+        "same source image with a cleaner replacement in the masked region, no visible edit seams",
+        "detail-focused inpaint of the selected area, natural texture and lighting match",
+        "final polish pass preserving identity, pose, background, and camera angle",
+    ],
+    "follow pose or shape": [
+        "follow the uploaded reference pose and composition, realistic photo result",
+        "same composition with new styling, clean edges, natural lighting",
+        "structure-guided variation with realistic proportions and sharp details",
+        "composition-guided portrait with professional finish",
+    ],
+    "make bigger or cleaner": [
+        "clean upscale preserving original identity, composition, texture, and lighting",
+        "subtle improvement with sharper detail and fewer artifacts",
+        "presentation-ready polished version, natural texture, no identity drift",
+        "final high quality enhanced image preserving original look",
+    ],
+    "make new image": [
+        "high quality realistic photo, natural lighting, sharp details",
+        "professional portrait, clean composition, realistic skin texture",
+        "lifestyle photo, natural expression, modern setting",
+        "social profile image, realistic photography, polished finish",
+    ],
+}
+
+
 @dataclass
 class AgentPlan:
     user_goal: str
@@ -63,10 +103,14 @@ class AgentPlan:
     generation_settings: str
     next_steps: str
     warnings: str
+    shot_prompts: List[str]
+    best_first_shot: str
+    handoff_recipe: str
 
     def as_markdown(self) -> str:
+        shot_text = "\n".join([f"{index + 1}. {prompt}" for index, prompt in enumerate(self.shot_prompts)])
         return (
-            f"## Agent Plan\n\n"
+            "## Agent Plan\n\n"
             f"**Goal:** {self.user_goal}\n\n"
             f"**Selected workflow:** {self.selected_workflow}\n\n"
             f"**Tool:** {self.tool}\n\n"
@@ -75,6 +119,9 @@ class AgentPlan:
             f"### Reference strategy\n{self.reference_strategy}\n\n"
             f"### Mask strategy\n{self.mask_strategy}\n\n"
             f"### Recommended settings\n{self.generation_settings}\n\n"
+            f"### Best first shot\n{self.best_first_shot}\n\n"
+            f"### Shot prompts\n{shot_text}\n\n"
+            f"### Fooocus hand-off recipe\n{self.handoff_recipe}\n\n"
             f"### Next steps\n{self.next_steps}\n\n"
             f"### Warnings / guardrails\n{self.warnings}"
         )
@@ -86,11 +133,11 @@ def _clean_goal(goal: str) -> str:
 
 def infer_workflow(goal: str, image_count: int, wants_identity: bool, wants_exact_edit: bool, wants_bundle: bool) -> str:
     text = goal.lower()
-    if wants_bundle or any(word in text for word in ["bundle", "set of", "all types", "multiple images", "photoshoot"]):
+    if wants_bundle or any(word in text for word in ["bundle", "set of", "all types", "multiple images", "photoshoot", "photo shoot"]):
         return "photo bundle"
     if wants_exact_edit or any(word in text for word in ["remove", "replace", "change jacket", "change background", "edit only", "inpaint"]):
         return "edit part of image"
-    if any(word in text for word in ["stand up", "full body", "same person", "identity", "me "]) or wants_identity:
+    if any(word in text for word in ["stand up", "standing", "full body", "same person", "identity", "me "]) or wants_identity:
         return "keep identity"
     if any(word in text for word in ["pose", "structure", "outline", "composition", "canny", "cpds"]):
         return "follow pose or shape"
@@ -101,25 +148,23 @@ def infer_workflow(goal: str, image_count: int, wants_identity: bool, wants_exac
     return "make new image"
 
 
+def _identity_prefix() -> str:
+    return (
+        "same adult man from the reference photo, preserve facial identity, age, skin tone, face shape, "
+        "natural expression, realistic body proportions"
+    )
+
+
 def build_prompt(goal: str, workflow: str) -> str:
     goal = _clean_goal(goal)
-    base = "high quality realistic photography, natural lighting, sharp details"
+    base = "high quality realistic photography, natural lighting, sharp details, professional finish"
 
     if workflow == "photo bundle":
-        return (
-            "same adult person from the reference photos, preserve facial identity, age, skin tone, natural expression, "
-            "realistic body proportions, create a varied personal photo bundle, " + goal + ", " + base
-        )
+        return f"{_identity_prefix()}, {SHOT_PRESETS['photo bundle'][0]}, user goal: {goal}, {base}"
     if workflow == "keep identity":
-        return (
-            "same adult person from the reference photos, preserve facial identity, age, skin tone, face shape, natural expression, "
-            "realistic body proportions, " + goal + ", " + base
-        )
+        return f"{_identity_prefix()}, {goal}, {base}"
     if workflow == "edit part of image":
-        return (
-            "same person, preserve unchanged areas, seamless realistic edit, natural lighting, "
-            "only change the requested area, " + goal
-        )
+        return "same person, preserve unchanged areas, seamless realistic edit, natural lighting, only change the requested area, " + goal
     if workflow == "follow pose or shape":
         return "use the uploaded reference for pose/composition guidance, " + goal + ", " + base
     if workflow == "make bigger or cleaner":
@@ -127,10 +172,20 @@ def build_prompt(goal: str, workflow: str) -> str:
     return goal + ", " + base
 
 
+def build_shot_prompts(goal: str, workflow: str) -> List[str]:
+    goal = _clean_goal(goal)
+    presets = SHOT_PRESETS.get(workflow, SHOT_PRESETS["make new image"])
+    if workflow in {"photo bundle", "keep identity"}:
+        return [f"{_identity_prefix()}, {shot}, user goal: {goal}" for shot in presets]
+    if workflow == "edit part of image":
+        return [f"same person, preserve unmasked areas, {shot}, user goal: {goal}" for shot in presets]
+    return [f"{shot}, user goal: {goal}" for shot in presets]
+
+
 def build_negative_prompt(workflow: str) -> str:
     common = "low quality, blurry, distorted face, bad hands, extra limbs, warped fingers, artifacts, unrealistic anatomy"
     if workflow in {"keep identity", "photo bundle", "edit part of image"}:
-        return common + ", different person, changed identity, unnatural skin, distorted eyes"
+        return common + ", different person, changed identity, unnatural skin, distorted eyes, cropped head, missing legs"
     return common
 
 
@@ -138,8 +193,8 @@ def build_next_steps(workflow: str) -> str:
     if workflow == "edit part of image":
         return (
             "1. Upload the source image.\n"
-            "2. Choose the area to edit.\n"
-            "3. Use automatic mask if possible, then review the mask.\n"
+            "2. Choose or generate a mask for the exact area.\n"
+            "3. Review the mask before generating.\n"
             "4. Generate 2-4 candidates.\n"
             "5. Pick the best one and enhance/upscale if needed."
         )
@@ -160,12 +215,33 @@ def build_next_steps(workflow: str) -> str:
         return "1. Upload the image.\n2. Use Upscale (2x) for quality.\n3. Use subtle variation only when you want small creative changes."
     if workflow == "photo bundle":
         return (
-            "1. Upload face, upper-body, and full-body references if available.\n"
-            "2. Generate one bundle category at a time.\n"
-            "3. Keep the best identity match.\n"
+            "1. Generate Shot 1 first.\n"
+            "2. If identity is close, generate the next shot prompts one at a time.\n"
+            "3. Keep the best identity match from each shot.\n"
             "4. Use upscale/enhance on winners."
         )
     return "1. Enter prompt.\n2. Pick style.\n3. Generate.\n4. Save the best result."
+
+
+def build_handoff_recipe(workflow: str, image_count: int) -> str:
+    if workflow == "photo bundle":
+        return (
+            "Fooocus tab: Image Prompt. Use Reference image 1 as FaceSwap/identity reference. "
+            "If you have a full-body/pose reference, add it as a second Image Prompt reference using PyraCanny or CPDS. "
+            "Generate one shot prompt at a time, 2 images per run, Speed for drafts, Quality for final."
+        )
+    if workflow == "keep identity":
+        return (
+            "Fooocus tab: Image Prompt. Use FaceSwap/face reference for the face photo. "
+            "For standing or full-body images, add a second full-body pose reference if possible."
+        )
+    if workflow == "edit part of image":
+        return "Fooocus tab: Inpaint or Outpaint. Upload source image, draw/review mask, paste prompt, generate."
+    if workflow == "follow pose or shape":
+        return "Fooocus tab: Image Prompt. Use PyraCanny for strong edge following or CPDS for softer composition following."
+    if workflow == "make bigger or cleaner":
+        return "Fooocus tab: Upscale or Variation. Use Upscale 2x for cleaner/larger output."
+    return "Fooocus main prompt. Paste prompt and generate."
 
 
 def build_agent_plan(
@@ -178,17 +254,18 @@ def build_agent_plan(
     goal = _clean_goal(goal)
     workflow = infer_workflow(goal, image_count, wants_identity, wants_exact_edit, wants_bundle)
     info = WORKFLOW_LIBRARY[workflow]
-    primary_prompt = build_prompt(goal, workflow)
+    shot_prompts = build_shot_prompts(goal, workflow)
+    primary_prompt = shot_prompts[0] if shot_prompts else build_prompt(goal, workflow)
     negative_prompt = build_negative_prompt(workflow)
     generation_settings = (
         "Performance: Speed for drafts, Quality for final.\n"
-        "Image count: 2-4 candidates.\n"
+        "Image count: 2 candidates per shot.\n"
         "Styles: Fooocus Photograph + Fooocus Enhance + Fooocus Sharp for realistic personal photos.\n"
         "Seed: random for exploration, locked seed for refinement."
     )
     warnings = (
         "Reference images can drift if only one headshot is provided. Full-body goals work best with full-body references. "
-        "Exact edits require a reviewed mask. For personal images, keep metadata/log privacy settings in mind."
+        "Exact edits require a reviewed mask. For personal images, consider privacy/metadata settings."
     )
     return AgentPlan(
         user_goal=goal,
@@ -202,10 +279,22 @@ def build_agent_plan(
         generation_settings=generation_settings,
         next_steps=build_next_steps(workflow),
         warnings=warnings,
+        shot_prompts=shot_prompts,
+        best_first_shot=primary_prompt,
+        handoff_recipe=build_handoff_recipe(workflow, image_count),
     )
 
 
 def build_agent_outputs(goal: str, image_1, image_2, image_3, wants_identity: bool, wants_exact_edit: bool, wants_bundle: bool):
     image_count = sum(x is not None for x in [image_1, image_2, image_3])
     plan = build_agent_plan(goal, image_count, wants_identity, wants_exact_edit, wants_bundle)
-    return plan.as_markdown(), plan.primary_prompt, plan.negative_prompt, plan.tool, plan.fooocus_tab
+    shot_list = "\n\n".join([f"Shot {index + 1}: {prompt}" for index, prompt in enumerate(plan.shot_prompts)])
+    return (
+        plan.as_markdown(),
+        plan.primary_prompt,
+        plan.negative_prompt,
+        plan.tool,
+        plan.fooocus_tab,
+        shot_list,
+        plan.handoff_recipe,
+    )
