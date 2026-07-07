@@ -4,12 +4,13 @@
 
 Patching Fooocus `webui.py` directly is brittle. The correct architecture is to keep Fooocus as the SDXL engine and build a clean AI-assisted control interface beside it.
 
-## New files
+## Files
 
 ```txt
 ai_studio_app.py
 local_markup/ai_studio_agent.py
 RUN_AI_STUDIO.bat
+scripts/remove_easy_sdxl_webui.py
 docs/AI_IMAGE_STUDIO_PLAN.md
 ```
 
@@ -21,7 +22,18 @@ The current AI Studio is a standalone Gradio app at:
 http://127.0.0.1:7872
 ```
 
-It does not modify Fooocus core UI. It helps the user decide which workflow to use and prepares the prompt, negative prompt, reference strategy, mask strategy, and next steps.
+It does not modify Fooocus core UI. It helps the user decide which workflow to use and prepares the prompt, negative prompt, reference strategy, mask strategy, shot prompts, hand-off recipe, and next steps.
+
+## Clean Fooocus rule
+
+`RUN_FOOOCUS_LOCAL.bat` now removes old experimental Easy SDXL WebUI patch blocks before launching Fooocus. This keeps Fooocus clean and prevents the old accordion panel from interfering with the real engine UI.
+
+Manual cleanup command:
+
+```powershell
+python scripts\remove_easy_sdxl_webui.py
+python -m py_compile webui.py
+```
 
 ## User flow
 
@@ -36,7 +48,9 @@ It does not modify Fooocus core UI. It helps the user decide which workflow to u
    - PyraCanny / CPDS
    - Upscale / Variation
    - Bundle Builder
-6. The user reviews the plan and uses Fooocus as the engine.
+6. The user reviews the plan.
+7. The user copies the **Best first shot prompt** into Fooocus first.
+8. The user generates candidates one shot at a time.
 
 ## What the agent does
 
@@ -53,17 +67,48 @@ It outputs:
 
 - selected tool
 - Fooocus area
-- primary prompt
+- best first shot prompt
+- shot-by-shot prompt bundle
 - negative prompt
 - reference strategy
 - mask strategy
 - recommended settings
+- Fooocus hand-off recipe
 - next steps
 - warnings / guardrails
+
+## Top-shelf method for personal photo bundles
+
+For a personal photo bundle, the agent should not send one vague prompt like "create a varied personal photo bundle." It now generates specific shots:
+
+1. Resort / pool full-body shot
+2. Beach / resort walking shot
+3. Upper-body resort portrait
+4. Professional social profile portrait
+
+Each shot is generated one at a time. This is more reliable than asking SDXL to produce a whole bundle from one prompt.
+
+## Recommended Fooocus method for identity bundles
+
+Use:
+
+```txt
+Fooocus area: Image Prompt
+Reference image 1: clear face/source image
+Reference image 2: optional upper-body/style reference
+Reference image 3: optional full-body/pose reference
+Styles: Fooocus Photograph + Fooocus Enhance + Fooocus Sharp
+Performance: Speed for drafts, Quality for final
+Image number: 2 per shot
+```
+
+For standing/full-body outputs, a single headshot can inspire an image, but body accuracy improves with a full-body or pose reference.
 
 ## Why this is safer
 
 The new UI does not monkey-patch Fooocus UI. It can be iterated quickly and tested separately.
+
+The repo audit confirms that Fooocus has multiple powerful paths: text-to-image, Image Prompt, FaceSwap, PyraCanny, CPDS, Upscale/Variation, Inpaint/Outpaint, automatic mask generation, Enhance, Describe, Styles, LoRAs, metadata/logging, and output safety checks. Guardrails should live at the future job boundary, not only in the UI.
 
 ## Next engineering phase
 
