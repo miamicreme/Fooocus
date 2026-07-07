@@ -1,6 +1,6 @@
 import gradio as gr
 
-from local_markup.ai_studio_agent import build_agent_outputs
+from local_markup.ai_studio_agent_v2 import build_agent_outputs
 from local_markup.fooocus_feature_playbook import build_feature_reasoning
 from local_markup.fooocus_feature_catalog import list_features_markdown
 from local_markup.style_explainer import describe_style_markdown, list_style_names, style_recommendations_for_goal
