@@ -46,13 +46,16 @@ def build_app():
 
             agent_plan = gr.Markdown(label="Agent plan")
             with gr.Row():
-                primary_prompt = gr.Textbox(label="Primary prompt", lines=6)
+                primary_prompt = gr.Textbox(label="Best first shot prompt - copy this to Fooocus first", lines=6)
                 negative_prompt = gr.Textbox(label="Negative prompt", lines=6)
+            with gr.Row():
+                shot_prompts = gr.Textbox(label="Shot-by-shot prompt bundle", lines=12)
+                handoff_recipe = gr.Textbox(label="Fooocus hand-off recipe", lines=12)
 
             plan_btn.click(
                 build_agent_outputs,
                 inputs=[goal, image_1, image_2, image_3, wants_identity, wants_exact_edit, wants_bundle],
-                outputs=[agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area],
+                outputs=[agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area, shot_prompts, handoff_recipe],
                 queue=False,
             )
 
@@ -76,11 +79,12 @@ def build_app():
                 "This interface is the planning/control layer. Keep Fooocus running separately at `http://localhost:7865`.\n\n"
                 "Recommended workflow:\n"
                 "1. Ask the Studio Agent for a plan.\n"
-                "2. Open Fooocus.\n"
+                "2. Copy the **Best first shot prompt** into Fooocus first.\n"
                 "3. Use the selected Fooocus area shown by the agent.\n"
                 "4. Upload the same reference/source images.\n"
-                "5. Use the generated prompt and negative prompt.\n"
-                "6. Generate candidates and return here to plan the next refinement.\n\n"
+                "5. Use the generated negative prompt.\n"
+                "6. Generate candidates one shot at a time.\n"
+                "7. Return here for the next shot or refinement.\n\n"
                 "Next engineering step: add a real adapter so this UI can submit jobs directly to Fooocus or a RunPod backend without using the old Fooocus tabs."
             )
 
