@@ -1,0 +1,59 @@
+{
+  "prompt": "cinematic portrait of a futuristic architect",
+  "negative_prompt": "low quality, blurry",
+  "styles": ["Fooocus V2"],
+  "performance": "quality",
+  "image_count": 1,
+  "size": {
+    "width": 1024,
+    "height": 1024
+  },
+  "seed": {
+    "seed": 12345,
+    "randomize": false,
+    "increment_per_image": true
+  },
+  "models": {
+    "base": "example-base-model.safetensors",
+    "refiner": "None",
+    "vae": "Default",
+    "refiner_switch": 0.5,
+    "refiner_swap_method": "joint"
+  },
+  "loras": [],
+  "advanced": {
+    "steps": 30,
+    "cfg_scale": 7.0,
+    "sharpness": 2.0,
+    "sampler": "dpmpp_2m_sde_gpu",
+    "scheduler": "karras",
+    "clip_skip": 1,
+    "freeu_enabled": false,
+    "disable_preview": false,
+    "disable_intermediate_results": false
+  },
+  "inputs": {
+    "controls": [],
+    "upscale_or_variation": null,
+    "inpaint": null,
+    "enhance": []
+  },
+  "output": {
+    "format": "png",
+    "persist": true,
+    "save_metadata": true,
+    "metadata_scheme": "fooocus",
+    "create_grid": false,
+    "save_intermediate": false
+  },
+  "content_filter": {
+    "enabled": true,
+    "mode": "checker",
+    "apply_to_previews": false,
+    "apply_to_outputs": true
+  },
+  "request_metadata": {
+    "fixture": "text_to_image_basic",
+    "purpose": "schema validation and parity planning"
+  }
+}
