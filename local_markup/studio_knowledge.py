@@ -180,14 +180,14 @@ SCENARIO_RULES: List[tuple[str, List[str], str]] = [
     ("exact local edit", ["remove", "replace", "change only", "edit only", "inpaint", "mask"], "inpaint"),
     ("automatic object mask", ["auto mask", "detect", "scan", "select object", "select the object"], "auto_mask_sam"),
     ("background/person segmentation", ["person mask", "background mask", "segment", "segmentation", "select subject", "select background"], "auto_mask_u2net"),
-    ("subject consistency", ["same person", "keep my face", "recognizable", "identity", "me standing", "make me", "standing lifestyle"], "face_reference"),
+    ("subject consistency", ["same person", "keep my face", "recognizable", "identity", "me standing", "make me", "standing lifestyle", "full body resort lifestyle"], "face_reference"),
     ("pose or edge control", ["pose", "outline", "edges", "canny", "structure"], "pyracanny"),
     ("composition control", ["composition", "depth", "layout", "cpds"], "cpds"),
     ("upscale", ["upscale", "bigger", "larger", "higher resolution", "sharper"], "upscale"),
     ("variation", ["variation", "new version", "inspired by", "similar but different"], "variation"),
     ("enhance", ["enhance", "improve", "polish", "clean up"], "enhance"),
     ("describe", ["describe", "what is in", "turn into prompt", "analyze image"], "describe"),
-    ("style guidance", ["style", "visual language", "photo finish"], "styles"),
+    ("style guidance", ["visual style", "style guidance", "visual language", "photo finish"], "styles"),
     ("model guidance", ["lora", "model", "checkpoint"], "models_loras"),
 ]
 
