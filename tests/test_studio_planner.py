@@ -10,7 +10,7 @@ from local_markup.studio_knowledge import FEATURES, REQUIRED_FEATURE_KEYS, route
     ("goal", "expected_key"),
     [
         ("Create a clean product photo of a sneaker", "text_to_image"),
-        ("Use this image as style inspiration", "image_prompt"),
+        ("Use this uploaded image as the visual reference", "image_prompt"),
         ("Make a standing lifestyle photo from this source", "face_reference"),
         ("Remove the jacket from this photo", "inpaint"),
         ("Use this pose but make a new image", "pyracanny"),
