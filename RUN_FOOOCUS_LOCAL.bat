@@ -10,6 +10,8 @@ set GRADIO_VERSION_CHECK=False
 echo Starting Fooocus locally...
 echo Using: %PYTHON_CMD%
 echo Gradio is intentionally pinned for Fooocus compatibility.
+echo Removing old experimental WebUI patches if present...
+%PYTHON_CMD% scripts\remove_easy_sdxl_webui.py
 echo WebUI patching is disabled. Use RUN_AI_STUDIO.bat for the new guided UI.
 echo.
 %PYTHON_CMD% launch.py --disable-analytics --listen
