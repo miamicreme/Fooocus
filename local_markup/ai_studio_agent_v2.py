@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from local_markup.studio_guardrails import validate_feature_use
 from local_markup.studio_knowledge import StudioFeature, route_feature
 
 
@@ -93,7 +92,6 @@ class AgentPlan:
     next_steps: str
     shot_prompts: List[str]
     handoff_recipe: str
-    guardrail_status: str
 
     @property
     def tool(self) -> str:
@@ -119,8 +117,7 @@ class AgentPlan:
             f"### Shot prompts\n{shot_text}\n\n"
             f"### Fooocus hand-off recipe\n{self.handoff_recipe}\n\n"
             f"### Recommended settings\n{self.generation_settings}\n\n"
-            f"### Next steps\n{self.next_steps}\n\n"
-            f"### Guardrails\n{self.guardrail_status}"
+            f"### Next steps\n{self.next_steps}"
         )
 
 
@@ -192,7 +189,6 @@ def build_next_steps(feature: StudioFeature) -> str:
 def build_agent_plan(goal: str, image_count: int = 0, wants_identity: bool = True, wants_exact_edit: bool = False, wants_bundle: bool = False) -> AgentPlan:
     goal = clean_goal(goal)
     feature = route_feature(goal, image_count, wants_identity, wants_exact_edit, wants_bundle)
-    guardrail = validate_feature_use(feature, goal, image_count, wants_identity)
     shot_prompts = build_shot_prompts(goal, feature.key, wants_identity or feature.key == "face_reference")
     return AgentPlan(
         user_goal=goal,
@@ -208,7 +204,6 @@ def build_agent_plan(goal: str, image_count: int = 0, wants_identity: bool = Tru
         next_steps=build_next_steps(feature),
         shot_prompts=shot_prompts,
         handoff_recipe=build_handoff_recipe(feature),
-        guardrail_status=guardrail.as_text(),
     )
 
 
