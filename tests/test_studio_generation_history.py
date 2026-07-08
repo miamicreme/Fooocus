@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from local_markup.engine_queue_contract import EngineJobKind
 from local_markup.studio_adapter_contract import AdapterJobStatus, AdapterResult, ImageStudioJob, ReferenceImage
-from local_markup.studio_generation_history import add_adapter_result_to_history, history_item_from_adapter_result
+from local_markup.studio_generation_history import add_adapter_result_to_history, history_item_from_adapter_result, reference_metadata
 from local_markup.studio_history import StudioHistoryStore
 
 
@@ -13,7 +13,7 @@ def test_history_item_from_adapter_result_preserves_job_fields() -> None:
         negative_prompt="blur",
         kind=EngineJobKind.TEXT_TO_IMAGE,
         seed=99,
-        references=[ReferenceImage(name="ref", path="ref.png")],
+        references=[ReferenceImage(name="ref", path="ref.png", role="image_prompt")],
         metadata={"fooocus_area": "Text to Image"},
     )
     result = AdapterResult(status=AdapterJobStatus.ACCEPTED, message="accepted", job_id="job-1")
@@ -30,6 +30,29 @@ def test_history_item_from_adapter_result_preserves_job_fields() -> None:
     assert item.notes == "winner"
     assert item.metadata["adapter_status"] == "accepted"
     assert item.metadata["reference_count"] == "1"
+    assert item.metadata["reference_1_name"] == "ref"
+    assert item.metadata["reference_1_path"] == "ref.png"
+    assert item.metadata["reference_1_role"] == "image_prompt"
+
+
+def test_reference_metadata_preserves_multiple_reference_roles() -> None:
+    job = ImageStudioJob(
+        goal="edit image",
+        prompt="replace background",
+        negative_prompt="changed person",
+        kind=EngineJobKind.INPAINT,
+        references=[
+            ReferenceImage(name="source", path="source.png", role="inpaint_source"),
+            ReferenceImage(name="mask", path="mask.png", role="inpaint_mask"),
+        ],
+    )
+
+    metadata = reference_metadata(job)
+
+    assert metadata["reference_count"] == "2"
+    assert metadata["reference_1_role"] == "inpaint_source"
+    assert metadata["reference_2_role"] == "inpaint_mask"
+    assert metadata["reference_2_path"] == "mask.png"
 
 
 def test_add_adapter_result_to_history_adds_latest_first() -> None:
