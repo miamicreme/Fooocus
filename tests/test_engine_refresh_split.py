@@ -34,8 +34,9 @@ def _function_node(name: str) -> ast.FunctionDef:
 
 def _called_functions(function_name: str) -> list[str]:
     node = _function_node(function_name)
+    body_tree = ast.Module(body=node.body, type_ignores=[])
     calls: list[str] = []
-    for child in ast.walk(node):
+    for child in ast.walk(body_tree):
         if isinstance(child, ast.Call):
             if isinstance(child.func, ast.Name):
                 calls.append(child.func.id)
