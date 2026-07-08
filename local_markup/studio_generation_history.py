@@ -13,6 +13,16 @@ def manual_history_id(job: ImageStudioJob) -> str:
     return f"manual-{digest}"
 
 
+def reference_metadata(job: ImageStudioJob) -> dict[str, str]:
+    metadata: dict[str, str] = {"reference_count": str(len(job.references))}
+    for index, reference in enumerate(job.references, start=1):
+        prefix = f"reference_{index}"
+        metadata[f"{prefix}_name"] = reference.name
+        metadata[f"{prefix}_path"] = reference.path or ""
+        metadata[f"{prefix}_role"] = reference.role
+    return metadata
+
+
 def history_item_from_adapter_result(
     job: ImageStudioJob,
     result: AdapterResult,
@@ -22,11 +32,11 @@ def history_item_from_adapter_result(
 ) -> StudioHistoryItem:
     item_id = result.job_id or manual_history_id(job)
     metadata = dict(job.metadata)
+    metadata.update(reference_metadata(job))
     metadata.update(
         {
             "adapter_status": result.status.value,
             "adapter_message": result.message,
-            "reference_count": str(len(job.references)),
         }
     )
     return StudioHistoryItem(

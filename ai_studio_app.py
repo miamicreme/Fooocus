@@ -1,6 +1,6 @@
 import gradio as gr
 
-from local_markup.ai_studio_agent_v2 import build_agent_outputs
+from local_markup.studio_workflow_controller import build_studio_workflow_outputs
 from local_markup.fooocus_feature_playbook import build_feature_reasoning
 from local_markup.fooocus_feature_catalog import list_features_markdown
 from local_markup.style_explainer import describe_style_markdown, list_style_names, style_recommendations_for_goal
@@ -30,7 +30,7 @@ def build_app():
     with gr.Blocks(title="AI Image Studio") as demo:
         gr.Markdown(
             "# AI Image Studio\n"
-            "Plan one focused Fooocus generation at a time. The Studio chooses the workflow, prompt, negative prompt, shot plan, and hand-off recipe while Fooocus remains the separate generation engine."
+            "Plan one focused Fooocus generation at a time. The Studio chooses the workflow, prompt, negative prompt, shot plan, adapter preview, and hand-off recipe while Fooocus remains the separate generation engine."
         )
 
         with gr.Tab("Studio Agent"):
@@ -49,11 +49,12 @@ def build_app():
                         wants_identity = gr.Checkbox(label="Keep the same person / subject from references", value=True)
                         wants_exact_edit = gr.Checkbox(label="Exact edit of uploaded image or masked area", value=False)
                         wants_bundle = gr.Checkbox(label="Build a shot bundle / photoshoot set", value=False)
+                        vram_gb = gr.Slider(label="GPU VRAM profile", minimum=4, maximum=24, value=6, step=1)
                     plan_btn = gr.Button("Plan Best Fooocus Workflow", variant="primary")
 
                 with gr.Column(scale=1):
                     image_1 = gr.Image(label="Reference 1 - main subject or source image", type="numpy")
-                    image_2 = gr.Image(label="Reference 2 - optional style or upper-body reference", type="numpy")
+                    image_2 = gr.Image(label="Reference 2 - optional style, mask, or upper-body reference", type="numpy")
                     image_3 = gr.Image(label="Reference 3 - optional full-body, pose, or layout reference", type="numpy")
 
             gr.Markdown("## 2. Copy these fields into Fooocus")
@@ -69,13 +70,17 @@ def build_app():
                 handoff_recipe = gr.Textbox(label="Copy third: Fooocus hand-off recipe", lines=10)
                 shot_prompts = gr.Textbox(label="Next shots after first result", lines=10)
 
+            with gr.Accordion("Adapter preview and local history", open=True):
+                adapter_preview = gr.Markdown(label="Adapter preview")
+                history_preview = gr.Markdown(label="History preview")
+
             with gr.Accordion("Full agent plan and reasoning", open=True):
                 agent_plan = gr.Markdown(label="Agent plan")
 
             plan_btn.click(
-                build_agent_outputs,
-                inputs=[goal, image_1, image_2, image_3, wants_identity, wants_exact_edit, wants_bundle],
-                outputs=[agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area, shot_prompts, handoff_recipe],
+                build_studio_workflow_outputs,
+                inputs=[goal, image_1, image_2, image_3, wants_identity, wants_exact_edit, wants_bundle, vram_gb],
+                outputs=[agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area, shot_prompts, handoff_recipe, adapter_preview, history_preview],
                 queue=False,
             )
 
@@ -115,13 +120,14 @@ def build_app():
                 "This interface is the planning/control layer. Keep Fooocus running separately at `http://localhost:7865`.\n\n"
                 "Recommended workflow:\n"
                 "1. Ask the Studio Agent for a plan.\n"
-                "2. Copy the **Best first shot prompt** into Fooocus first.\n"
-                "3. Use the selected Fooocus area shown by the agent.\n"
-                "4. Upload the same reference/source images.\n"
-                "5. Use the generated negative prompt.\n"
-                "6. Generate candidates one shot at a time.\n"
-                "7. Return here for the next shot or refinement.\n\n"
-                "Adapter work comes later. This UI does not submit jobs directly yet."
+                "2. Review the **Adapter preview and local history** section.\n"
+                "3. Copy the **Best first shot prompt** into Fooocus first.\n"
+                "4. Use the selected Fooocus area shown by the agent.\n"
+                "5. Upload the same reference/source images.\n"
+                "6. Use the generated negative prompt.\n"
+                "7. Generate candidates one shot at a time.\n"
+                "8. Return here for the next shot or refinement.\n\n"
+                "The adapter preview is a local dry-run. It prepares the job shape and history preview without directly starting active Fooocus generation."
             )
 
     return demo
