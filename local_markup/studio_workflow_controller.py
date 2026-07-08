@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
 from local_markup.ai_studio_agent_v2 import AgentPlan, build_agent_plan
 from local_markup.engine_hardware_profiles import HardwareProfile, profile_summary, select_hardware_profile
@@ -26,25 +26,37 @@ class StudioWorkflowRun:
     mapping_notes: List[str]
 
     def adapter_markdown(self) -> str:
-        handoff_steps = "\n".join([f"{index + 1}. {step}" for index, step in enumerate(self.adapter_result.handoff_steps)])
+        reference_lines = [f"- {item.role}: `{item.path or item.name}`" for item in self.job.references]
+        if not reference_lines:
+            reference_lines = ["- No references needed for this first shot."]
+
+        setup_steps = [
+            f"Open Fooocus area: **{self.plan.fooocus_tab}**.",
+            "Paste the first prompt into the main prompt box.",
+            "Paste the negative prompt into the negative prompt box.",
+            "Upload the listed reference images in the same order.",
+            "Generate one image first, then review before continuing.",
+        ]
+        handoff_steps = "\n".join([f"{index + 1}. {step}" for index, step in enumerate(setup_steps)])
         notes = "\n".join([f"- {note}" for note in self.mapping_notes])
         return (
-            "## Studio Adapter Preview\n\n"
-            f"**Status:** {self.adapter_result.status.value}\n\n"
-            f"**Job id:** {self.adapter_result.job_id or 'manual-handoff'}\n\n"
-            f"**Message:** {self.adapter_result.message}\n\n"
-            f"**Hardware profile:** {profile_summary(self.hardware_profile)}\n\n"
-            f"### Mapping notes\n{notes or '- No mapping notes.'}\n\n"
-            f"### Handoff / dry-run steps\n{handoff_steps or 'No steps returned.'}"
+            "## Ready for Fooocus\n\n"
+            "This is a safe preview. Nothing was generated yet.\n\n"
+            f"**Workflow:** {self.plan.tool}\n\n"
+            f"**Fooocus area:** {self.plan.fooocus_tab}\n\n"
+            f"**Hardware recommendation:** {profile_summary(self.hardware_profile)}\n\n"
+            f"### References to upload\n{chr(10).join(reference_lines)}\n\n"
+            f"### Simple setup steps\n{handoff_steps}\n\n"
+            f"### Why this setup\n{notes or '- Standard text-to-image setup.'}"
         )
 
     def history_markdown(self) -> str:
         rows = []
         for item in self.history.latest(limit=5):
             rows.append(
-                f"- `{item.item_id}` | workflow `{item.workflow}` | refs {item.metadata.get('reference_count', '0')} | status {item.metadata.get('adapter_status', 'unknown')}"
+                f"- `{item.workflow}` plan saved as `{item.item_id}` with {item.metadata.get('reference_count', '0')} reference(s). Status: {item.metadata.get('adapter_status', 'unknown')}."
             )
-        return "## Studio History Preview\n\n" + ("\n".join(rows) if rows else "No history items yet.")
+        return "## Local Session History\n\n" + ("\n".join(rows) if rows else "No session history yet.")
 
 
 def reference_names_from_count(image_count: int) -> List[str]:
@@ -107,7 +119,7 @@ def build_job_from_plan(plan: AgentPlan, image_count: int) -> tuple[ImageStudioJ
         references=references,
         metadata={"fooocus_area": plan.fooocus_tab, "studio_feature": feature_key},
     )
-    notes = [f"Mapped Studio feature `{feature_key}` to engine job kind `{job.kind.value}`."]
+    notes = [f"Use the `{feature_key}` Studio plan as a `{job.kind.value}` Fooocus job."]
     return job, notes
 
 
