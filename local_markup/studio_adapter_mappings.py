@@ -51,3 +51,23 @@ def build_face_reference_job(goal: str, prompt: str, negative_prompt: str, face_
         AdapterMappingNote("reference_mode", "face_reference", "Keep identity guidance separate from general composition references."),
     ]
     return AdapterMappingPlan(job=job, notes=notes)
+
+
+def build_inpaint_job(goal: str, prompt: str, negative_prompt: str, source_image_path: str, mask_path: str) -> AdapterMappingPlan:
+    job = ImageStudioJob(
+        goal=goal,
+        prompt=prompt,
+        negative_prompt=negative_prompt,
+        kind=EngineJobKind.INPAINT,
+        references=[
+            ReferenceImage(name="source_image", path=source_image_path, role="inpaint_source"),
+            ReferenceImage(name="mask", path=mask_path, role="inpaint_mask"),
+        ],
+        metadata={"fooocus_area": "Inpaint", "edit_mode": "masked_edit"},
+    )
+    notes = [
+        AdapterMappingNote("fooocus_area", "Inpaint", "Use the Inpaint tab for local masked edits."),
+        AdapterMappingNote("source_image", source_image_path, "Upload this as the image to edit."),
+        AdapterMappingNote("mask", mask_path, "Use this mask to limit the edit area."),
+    ]
+    return AdapterMappingPlan(job=job, notes=notes)
