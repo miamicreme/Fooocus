@@ -4,6 +4,7 @@ from local_markup.studio_workflow_controller import build_studio_workflow_output
 from local_markup.fooocus_feature_playbook import build_feature_reasoning
 from local_markup.fooocus_feature_catalog import list_features_markdown
 from local_markup.style_explainer import describe_style_markdown, list_style_names, style_recommendations_for_goal
+from local_markup.studio_usage_guide import studio_usage_markdown
 
 
 STYLE_NAMES = list_style_names()
@@ -30,51 +31,53 @@ def build_app():
     with gr.Blocks(title="AI Image Studio") as demo:
         gr.Markdown(
             "# AI Image Studio\n"
-            "Plan one focused Fooocus generation at a time. The Studio chooses the workflow, prompt, negative prompt, shot plan, adapter preview, and hand-off recipe while Fooocus remains the separate generation engine."
+            "Create one strong Fooocus image at a time. The Studio gives you the exact workflow, prompt, negative prompt, reference plan, and copy steps. Fooocus stays open separately as the generation engine."
         )
 
         with gr.Tab("Studio Agent"):
             gr.Markdown(
-                "## 1. Describe the goal\n"
-                "Use this tab to create copy-ready instructions for Fooocus. Generate one shot first, review it, then continue to the next shot."
+                "## 1. Tell the Studio what you want\n"
+                "Keep it simple: one image goal, only the references that matter, then generate one first shot in Fooocus before making variations."
             )
+            with gr.Accordion("Fast no-friction instructions", open=True):
+                gr.Markdown(value=studio_usage_markdown())
             with gr.Row():
                 with gr.Column(scale=1):
                     goal = gr.Textbox(
-                        label="Goal / creative direction",
-                        placeholder="Example: make me standing full body near a resort pool, keep my face recognizable, realistic photo",
+                        label="What image do you want?",
+                        placeholder="Example: realistic full-body resort pool photo, keep my face recognizable, clean luxury lifestyle look",
                         lines=5,
                     )
-                    with gr.Accordion("Optional intent switches", open=False):
-                        wants_identity = gr.Checkbox(label="Keep the same person / subject from references", value=True)
-                        wants_exact_edit = gr.Checkbox(label="Exact edit of uploaded image or masked area", value=False)
-                        wants_bundle = gr.Checkbox(label="Build a shot bundle / photoshoot set", value=False)
-                        vram_gb = gr.Slider(label="GPU VRAM profile", minimum=4, maximum=24, value=6, step=1)
-                    plan_btn = gr.Button("Plan Best Fooocus Workflow", variant="primary")
+                    with gr.Accordion("Optional controls", open=False):
+                        wants_identity = gr.Checkbox(label="Keep same person or subject", value=True)
+                        wants_exact_edit = gr.Checkbox(label="Edit only a specific image or masked area", value=False)
+                        wants_bundle = gr.Checkbox(label="Plan a small shot set after the first image", value=False)
+                        vram_gb = gr.Slider(label="GPU VRAM in GB", minimum=4, maximum=24, value=6, step=1)
+                    plan_btn = gr.Button("Build My Fooocus Plan", variant="primary")
 
                 with gr.Column(scale=1):
-                    image_1 = gr.Image(label="Reference 1 - main subject or source image", type="numpy")
-                    image_2 = gr.Image(label="Reference 2 - optional style, mask, or upper-body reference", type="numpy")
-                    image_3 = gr.Image(label="Reference 3 - optional full-body, pose, or layout reference", type="numpy")
+                    image_1 = gr.Image(label="Reference 1: main subject, source image, or face", type="numpy")
+                    image_2 = gr.Image(label="Reference 2: optional mask, style, or support image", type="numpy")
+                    image_3 = gr.Image(label="Reference 3: optional pose, layout, or extra angle", type="numpy")
 
-            gr.Markdown("## 2. Copy these fields into Fooocus")
+            gr.Markdown("## 2. Copy into Fooocus in this order")
             with gr.Row():
-                selected_tool = gr.Textbox(label="Selected Fooocus workflow", interactive=False)
-                selected_area = gr.Textbox(label="Fooocus tab / area to use", interactive=False)
-
-            with gr.Row():
-                primary_prompt = gr.Textbox(label="Copy first: Best first shot prompt", lines=7)
-                negative_prompt = gr.Textbox(label="Copy second: Negative prompt", lines=7)
+                selected_tool = gr.Textbox(label="Use this Fooocus workflow", interactive=False)
+                selected_area = gr.Textbox(label="Open this Fooocus tab or area", interactive=False)
 
             with gr.Row():
-                handoff_recipe = gr.Textbox(label="Copy third: Fooocus hand-off recipe", lines=10)
-                shot_prompts = gr.Textbox(label="Next shots after first result", lines=10)
+                primary_prompt = gr.Textbox(label="Step 1: Copy this prompt", lines=7)
+                negative_prompt = gr.Textbox(label="Step 2: Copy this negative prompt", lines=7)
 
-            with gr.Accordion("Adapter preview and local history", open=True):
+            with gr.Row():
+                handoff_recipe = gr.Textbox(label="Step 3: Follow these Fooocus setup steps", lines=10)
+                shot_prompts = gr.Textbox(label="Use these only after the first result", lines=10)
+
+            with gr.Accordion("Review before generating", open=True):
                 adapter_preview = gr.Markdown(label="Adapter preview")
                 history_preview = gr.Markdown(label="History preview")
 
-            with gr.Accordion("Full agent plan and reasoning", open=True):
+            with gr.Accordion("Full reasoning", open=False):
                 agent_plan = gr.Markdown(label="Agent plan")
 
             plan_btn.click(
@@ -87,7 +90,7 @@ def build_app():
         with gr.Tab("Feature Brain"):
             gr.Markdown(
                 "## Feature Brain\n"
-                "This explains which Fooocus features the agent will use for the current scenario and why."
+                "Use this when you want to understand why the Studio chose a Fooocus feature."
             )
             feature_btn = gr.Button("Explain Feature Stack", variant="primary")
             feature_stack = gr.Markdown()
@@ -101,33 +104,35 @@ def build_app():
                 catalog = gr.Markdown(value=feature_catalog_markdown())
 
         with gr.Tab("Style Coach"):
-            gr.Markdown("Use this before generating to understand what a Fooocus style will do to the image.")
+            gr.Markdown("Use this before generating if you need help choosing a Fooocus style.")
             with gr.Row():
                 with gr.Column():
                     style_name = gr.Dropdown(label="Style", choices=STYLE_NAMES, value="Fooocus Photograph")
-                    style_goal = gr.Textbox(label="Goal", value="realistic personal photo", lines=3)
+                    style_goal = gr.Textbox(label="Image goal", value="realistic personal photo", lines=3)
                     explain_btn = gr.Button("Explain Style", variant="primary")
                     recommend_btn = gr.Button("Recommend Styles")
                 with gr.Column():
                     style_explanation = gr.Markdown()
-                    style_recs = gr.Textbox(label="Recommendations", lines=8)
+                    style_recs = gr.Textbox(label="Recommended styles", lines=8)
             explain_btn.click(explain_style, inputs=[style_name, style_goal], outputs=style_explanation, queue=False)
             recommend_btn.click(recommend_styles, inputs=style_goal, outputs=style_recs, queue=False)
 
         with gr.Tab("Fooocus Hand-Off"):
             gr.Markdown(
-                "## Use Fooocus as the engine\n\n"
-                "This interface is the planning/control layer. Keep Fooocus running separately at `http://localhost:7865`.\n\n"
-                "Recommended workflow:\n"
-                "1. Ask the Studio Agent for a plan.\n"
-                "2. Review the **Adapter preview and local history** section.\n"
-                "3. Copy the **Best first shot prompt** into Fooocus first.\n"
-                "4. Use the selected Fooocus area shown by the agent.\n"
-                "5. Upload the same reference/source images.\n"
-                "6. Use the generated negative prompt.\n"
-                "7. Generate candidates one shot at a time.\n"
-                "8. Return here for the next shot or refinement.\n\n"
-                "The adapter preview is a local dry-run. It prepares the job shape and history preview without directly starting active Fooocus generation."
+                "## Fooocus hand-off\n\n"
+                "Keep Fooocus running at `http://127.0.0.1:7865`. This Studio does not generate the image for you yet. It gives you the clean setup so you do not have to guess.\n\n"
+                "### Fast workflow\n"
+                "1. Open **Studio Agent**.\n"
+                "2. Describe one image.\n"
+                "3. Upload only the references that matter.\n"
+                "4. Click **Build My Fooocus Plan**.\n"
+                "5. In Fooocus, open the workflow/tab shown by **Use this Fooocus workflow**.\n"
+                "6. Copy **Step 1** prompt.\n"
+                "7. Copy **Step 2** negative prompt.\n"
+                "8. Follow **Step 3** setup steps.\n"
+                "9. Generate one image first.\n"
+                "10. Come back for the next shot only after reviewing the first result.\n\n"
+                "The preview section is a safe dry-run. It checks the job shape and local history without starting live generation."
             )
 
     return demo

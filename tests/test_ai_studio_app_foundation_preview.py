@@ -17,8 +17,9 @@ def test_build_studio_workflow_outputs_includes_preview_sections() -> None:
     )
 
     assert len(outputs) == 9
-    assert "## Studio Adapter Preview" in outputs[7]
-    assert "## Studio History Preview" in outputs[8]
+    assert "## Ready for Fooocus" in outputs[7]
+    assert "Generate one image first" in outputs[7]
+    assert "## Local Session History" in outputs[8]
 
 
 def test_ai_studio_app_builds_without_launching() -> None:

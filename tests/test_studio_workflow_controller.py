@@ -3,7 +3,6 @@ from __future__ import annotations
 from local_markup.engine_queue_contract import EngineJobKind
 from local_markup.studio_adapter_contract import AdapterJobStatus
 from local_markup.studio_workflow_controller import (
-    build_job_from_plan,
     build_studio_workflow_outputs,
     reference_names_from_count,
     run_studio_workflow,
@@ -72,5 +71,6 @@ def test_build_studio_workflow_outputs_shape_matches_ui_outputs() -> None:
     assert outputs[4]
     assert "Shot 1:" in outputs[5]
     assert outputs[6]
-    assert "## Studio Adapter Preview" in outputs[7]
-    assert "## Studio History Preview" in outputs[8]
+    assert "## Ready for Fooocus" in outputs[7]
+    assert "Simple setup steps" in outputs[7]
+    assert "## Local Session History" in outputs[8]
