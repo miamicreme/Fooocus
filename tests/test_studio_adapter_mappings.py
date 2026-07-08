@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from local_markup.engine_queue_contract import EngineJobKind
-from local_markup.studio_adapter_mappings import build_face_reference_job, build_image_prompt_job
+from local_markup.studio_adapter_mappings import build_face_reference_job, build_image_prompt_job, build_inpaint_job
 
 
 def test_build_image_prompt_job_preserves_reference_order() -> None:
@@ -31,3 +31,20 @@ def test_build_face_reference_job_marks_reference_mode() -> None:
     assert plan.job.references[0].role == "face_reference"
     assert plan.job.metadata["reference_mode"] == "face_reference"
     assert any(note.field == "reference_mode" for note in plan.notes)
+
+
+def test_build_inpaint_job_maps_source_and_mask() -> None:
+    plan = build_inpaint_job(
+        goal="replace only the background",
+        prompt="modern office background",
+        negative_prompt="changed person",
+        source_image_path="source.png",
+        mask_path="mask.png",
+    )
+
+    assert plan.job.kind == EngineJobKind.INPAINT
+    assert [ref.role for ref in plan.job.references] == ["inpaint_source", "inpaint_mask"]
+    assert [ref.path for ref in plan.job.references] == ["source.png", "mask.png"]
+    assert plan.job.metadata["fooocus_area"] == "Inpaint"
+    assert plan.job.metadata["edit_mode"] == "masked_edit"
+    assert any(note.field == "mask" for note in plan.notes)
