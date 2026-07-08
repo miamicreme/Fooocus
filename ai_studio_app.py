@@ -30,39 +30,47 @@ def build_app():
     with gr.Blocks(title="AI Image Studio") as demo:
         gr.Markdown(
             "# AI Image Studio\n"
-            "One source of truth for Fooocus. Upload images, describe the goal, and the Studio Agent chooses the workflow, feature stack, prompt, negative prompt, shot plan, and hand-off recipe."
+            "Plan one focused Fooocus generation at a time. The Studio chooses the workflow, prompt, negative prompt, shot plan, and hand-off recipe while Fooocus remains the separate generation engine."
         )
 
         with gr.Tab("Studio Agent"):
+            gr.Markdown(
+                "## 1. Describe the goal\n"
+                "Use this tab to create copy-ready instructions for Fooocus. Generate one shot first, review it, then continue to the next shot."
+            )
             with gr.Row():
                 with gr.Column(scale=1):
                     goal = gr.Textbox(
-                        label="What do you want?",
+                        label="Goal / creative direction",
                         placeholder="Example: make me standing full body near a resort pool, keep my face recognizable, realistic photo",
                         lines=5,
                     )
                     with gr.Accordion("Optional intent switches", open=False):
-                        wants_identity = gr.Checkbox(label="Preserve identity / same person", value=True)
-                        wants_exact_edit = gr.Checkbox(label="Exact edit of uploaded image", value=False)
-                        wants_bundle = gr.Checkbox(label="Build a bundle / photoshoot set", value=False)
-                    plan_btn = gr.Button("Plan Best Workflow", variant="primary")
+                        wants_identity = gr.Checkbox(label="Keep the same person / subject from references", value=True)
+                        wants_exact_edit = gr.Checkbox(label="Exact edit of uploaded image or masked area", value=False)
+                        wants_bundle = gr.Checkbox(label="Build a shot bundle / photoshoot set", value=False)
+                    plan_btn = gr.Button("Plan Best Fooocus Workflow", variant="primary")
 
                 with gr.Column(scale=1):
-                    image_1 = gr.Image(label="Reference 1 - face/source", type="numpy")
-                    image_2 = gr.Image(label="Reference 2 - style/upper body", type="numpy")
-                    image_3 = gr.Image(label="Reference 3 - full body/pose", type="numpy")
+                    image_1 = gr.Image(label="Reference 1 - main subject or source image", type="numpy")
+                    image_2 = gr.Image(label="Reference 2 - optional style or upper-body reference", type="numpy")
+                    image_3 = gr.Image(label="Reference 3 - optional full-body, pose, or layout reference", type="numpy")
+
+            gr.Markdown("## 2. Copy these fields into Fooocus")
+            with gr.Row():
+                selected_tool = gr.Textbox(label="Selected Fooocus workflow", interactive=False)
+                selected_area = gr.Textbox(label="Fooocus tab / area to use", interactive=False)
 
             with gr.Row():
-                selected_tool = gr.Textbox(label="Selected tool", interactive=False)
-                selected_area = gr.Textbox(label="Fooocus area", interactive=False)
+                primary_prompt = gr.Textbox(label="Copy first: Best first shot prompt", lines=7)
+                negative_prompt = gr.Textbox(label="Copy second: Negative prompt", lines=7)
 
-            agent_plan = gr.Markdown(label="Agent plan")
             with gr.Row():
-                primary_prompt = gr.Textbox(label="Best first shot prompt - use this first", lines=6)
-                negative_prompt = gr.Textbox(label="Negative prompt", lines=6)
-            with gr.Row():
-                shot_prompts = gr.Textbox(label="Shot-by-shot prompt bundle", lines=12)
-                handoff_recipe = gr.Textbox(label="Fooocus hand-off recipe", lines=12)
+                handoff_recipe = gr.Textbox(label="Copy third: Fooocus hand-off recipe", lines=10)
+                shot_prompts = gr.Textbox(label="Next shots after first result", lines=10)
+
+            with gr.Accordion("Full agent plan and reasoning", open=True):
+                agent_plan = gr.Markdown(label="Agent plan")
 
             plan_btn.click(
                 build_agent_outputs,
@@ -74,7 +82,7 @@ def build_app():
         with gr.Tab("Feature Brain"):
             gr.Markdown(
                 "## Feature Brain\n"
-                "This is the no-churn reasoning layer. It explains which Fooocus features the agent will use for the current scenario and why."
+                "This explains which Fooocus features the agent will use for the current scenario and why."
             )
             feature_btn = gr.Button("Explain Feature Stack", variant="primary")
             feature_stack = gr.Markdown()
@@ -113,7 +121,7 @@ def build_app():
                 "5. Use the generated negative prompt.\n"
                 "6. Generate candidates one shot at a time.\n"
                 "7. Return here for the next shot or refinement.\n\n"
-                "Next engineering step: add a real adapter so this UI can submit jobs directly to Fooocus or a RunPod backend without using the old Fooocus tabs."
+                "Adapter work comes later. This UI does not submit jobs directly yet."
             )
 
     return demo
