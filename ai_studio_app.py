@@ -6,6 +6,9 @@ from local_markup.fooocus_feature_catalog import list_features_markdown
 from local_markup.style_explainer import describe_style_markdown, list_style_names, style_recommendations_for_goal
 from local_markup.studio_usage_guide import studio_usage_markdown
 from local_markup.studio_one_ui_note import FOOOCUS_ENGINE_URL, one_ui_note_markdown
+from local_markup.studio_control_ui import CONTROL_UI_CSS, engine_hidden_note, history_gallery_empty_note, studio_hero_markdown
+from local_markup.studio_copy_controls import copy_controls_summary
+from local_markup.studio_downloads import write_history_download, write_prompt_pack
 
 
 STYLE_NAMES = list_style_names()
@@ -35,27 +38,24 @@ def feature_catalog_markdown():
 def fooocus_iframe_html():
     return (
         f'<iframe src="{FOOOCUS_ENGINE_URL}" '
-        'style="width:100%; height:82vh; border:1px solid #333; border-radius:8px;" '
+        'style="width:100%; height:78vh; border:1px solid #333; border-radius:12px;" '
         'title="Fooocus Engine"></iframe>'
     )
 
 
 def build_app():
-    with gr.Blocks(title="AI Image Studio") as demo:
-        gr.Markdown(
-            "# AI Image Studio One UI\n"
-            "Plan in Studio, generate in Fooocus, and stay on one browser page. Use the copy buttons on every text box."
-        )
+    with gr.Blocks(title="AI Image Studio", css=CONTROL_UI_CSS) as demo:
+        gr.HTML(value=studio_hero_markdown())
 
-        with gr.Tab("Studio Agent"):
-            gr.Markdown(
-                "## 1. Tell the Studio what you want\n"
-                "Keep it simple: one image goal, only the references that matter, then generate one first shot in Fooocus before making variations."
-            )
-            with gr.Accordion("Fast no-friction instructions", open=True):
-                gr.Markdown(value=studio_usage_markdown())
+        with gr.Tab("Studio Control Center"):
             with gr.Row():
                 with gr.Column(scale=1):
+                    gr.Markdown(
+                        "## Create the plan\n"
+                        "Start here. The raw Fooocus engine stays hidden until you are ready to paste and generate."
+                    )
+                    with gr.Accordion("Fast no-friction instructions", open=True):
+                        gr.Markdown(value=studio_usage_markdown())
                     goal = copyable_textbox(
                         label="What image do you want?",
                         placeholder="Example: realistic full-body resort pool photo, keep my face recognizable, clean luxury lifestyle look",
@@ -69,11 +69,12 @@ def build_app():
                     plan_btn = gr.Button("Build My Fooocus Plan", variant="primary")
 
                 with gr.Column(scale=1):
+                    gr.Markdown("## References\nUpload only what matters. Extra images create churn.")
                     image_1 = gr.Image(label="Reference 1: main subject, source image, or face", type="numpy")
                     image_2 = gr.Image(label="Reference 2: optional mask, style, or support image", type="numpy")
                     image_3 = gr.Image(label="Reference 3: optional pose, layout, or extra angle", type="numpy")
 
-            gr.Markdown("## 2. Copy into Fooocus in this order")
+            gr.Markdown(value=copy_controls_summary())
             with gr.Row():
                 selected_tool = copyable_textbox(label="Use this Fooocus workflow", interactive=False)
                 selected_area = copyable_textbox(label="Open this Fooocus tab or area", interactive=False)
@@ -90,6 +91,26 @@ def build_app():
                 adapter_preview = gr.Markdown(label="Adapter preview")
                 history_preview = gr.Markdown(label="History preview")
 
+            with gr.Row():
+                download_prompt_pack_btn = gr.Button("Download Prompt Pack", variant="secondary")
+                download_history_btn = gr.Button("Download Session History", variant="secondary")
+            with gr.Row():
+                prompt_pack_file = gr.File(label="Prompt pack download")
+                history_file = gr.File(label="Session history download")
+
+            with gr.Accordion("History gallery and image downloads", open=True):
+                gr.Markdown(value=history_gallery_empty_note())
+                gr.Gallery(label="Generated image history", value=[], visible=True, columns=4, height=320)
+                gr.Markdown(
+                    "Image download buttons will appear here after live generation output is connected. "
+                    "For now, use **Download Prompt Pack** and **Download Session History**."
+                )
+
+            with gr.Accordion("Hidden Fooocus engine", open=False):
+                gr.Markdown(value=engine_hidden_note())
+                gr.Markdown(value=one_ui_note_markdown())
+                gr.HTML(value=fooocus_iframe_html())
+
             with gr.Accordion("Full reasoning", open=False):
                 agent_plan = gr.Markdown(label="Agent plan")
 
@@ -99,10 +120,18 @@ def build_app():
                 outputs=[agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area, shot_prompts, handoff_recipe, adapter_preview, history_preview],
                 queue=False,
             )
-
-        with gr.Tab("Fooocus Engine"):
-            gr.Markdown(value=one_ui_note_markdown())
-            gr.HTML(value=fooocus_iframe_html())
+            download_prompt_pack_btn.click(
+                write_prompt_pack,
+                inputs=[selected_tool, selected_area, primary_prompt, negative_prompt, handoff_recipe, shot_prompts],
+                outputs=prompt_pack_file,
+                queue=False,
+            )
+            download_history_btn.click(
+                write_history_download,
+                inputs=history_preview,
+                outputs=history_file,
+                queue=False,
+            )
 
         with gr.Tab("Feature Brain"):
             gr.Markdown(
@@ -134,22 +163,17 @@ def build_app():
             explain_btn.click(explain_style, inputs=[style_name, style_goal], outputs=style_explanation, queue=False)
             recommend_btn.click(recommend_styles, inputs=style_goal, outputs=style_recs, queue=False)
 
-        with gr.Tab("Fooocus Hand-Off"):
+        with gr.Tab("How to Use"):
             gr.Markdown(
-                "## Fooocus hand-off\n\n"
-                "Use the **Fooocus Engine** tab in this same UI. The Studio does not generate the image for you yet. It gives you the clean setup so you do not have to guess.\n\n"
-                "### Fast workflow\n"
-                "1. Open **Studio Agent**.\n"
-                "2. Describe one image.\n"
-                "3. Upload only the references that matter.\n"
+                "## How to use this control UI\n\n"
+                "1. Run `RUN_STUDIO_ONE_UI.bat`.\n"
+                "2. Work from `http://127.0.0.1:7872`.\n"
+                "3. Use **Studio Control Center** first.\n"
                 "4. Click **Build My Fooocus Plan**.\n"
-                "5. Use the copy buttons on each output box.\n"
-                "6. Open **Fooocus Engine** in this same UI.\n"
-                "7. Paste the prompt and negative prompt into Fooocus.\n"
-                "8. Follow the setup steps.\n"
-                "9. Generate one image first.\n"
-                "10. Come back for the next shot only after reviewing the first result.\n\n"
-                "The preview section is a safe dry-run. It checks the job shape and local history without starting live generation."
+                "5. Use copy buttons on every output box.\n"
+                "6. Open **Hidden Fooocus engine** only when ready.\n"
+                "7. Paste, generate one image, review, then continue.\n\n"
+                "This is still a safe manual handoff. The hidden engine panel is not called automatically."
             )
 
     return demo
