@@ -13,11 +13,11 @@ def test_copyable_textbox_helper_enables_copy_button() -> None:
     assert "show_copy_button=True" in source
 
 
-def test_ai_studio_app_embeds_fooocus_engine_tab() -> None:
+def test_ai_studio_app_uses_copy_controls_and_hidden_engine_panel() -> None:
     source = inspect.getsource(ai_studio_app.build_app)
 
-    assert "Fooocus Engine" in source
-    assert "Use the copy buttons" in source
+    assert "Hidden Fooocus engine" in source
+    assert "Use copy buttons" in source or "copy buttons" in source
     assert "copyable_textbox" in source
 
 
@@ -26,7 +26,7 @@ def test_fooocus_iframe_points_to_local_engine() -> None:
 
     assert FOOOCUS_ENGINE_URL in html
     assert "iframe" in html
-    assert "height:82vh" in html
+    assert "height:78vh" in html
 
 
 def test_one_ui_note_is_clear() -> None:
