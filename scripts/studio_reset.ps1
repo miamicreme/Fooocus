@@ -32,7 +32,8 @@ function Test-PortListening {
 function Show-LogTail {
     param(
         [string]$Name,
-        [string]$LogPath
+        [string]$LogPath,
+        [int]$TailLines = 40
     )
 
     if (-not (Test-Path $LogPath)) {
@@ -41,10 +42,20 @@ function Show-LogTail {
     }
 
     Write-Host ""
-    Write-Host "Last lines from $Name log: $LogPath"
+    Write-Host "Last $TailLines lines from $Name log: $LogPath"
     Write-Host "------------------------------------------------------------"
-    Get-Content -Path $LogPath -Tail 80 -ErrorAction SilentlyContinue
+    Get-Content -Path $LogPath -Tail $TailLines -ErrorAction SilentlyContinue
     Write-Host "------------------------------------------------------------"
+}
+
+function Test-LogHasFailureClue {
+    param([string]$LogPath)
+    if (-not (Test-Path $LogPath)) {
+        return $false
+    }
+
+    $tail = Get-Content -Path $LogPath -Tail 80 -ErrorAction SilentlyContinue
+    return ($tail -match "Traceback|ModuleNotFoundError|ImportError|RuntimeError|ERROR:|Exception|exited with code [1-9]").Count -gt 0
 }
 
 function Wait-PortReady {
@@ -52,28 +63,49 @@ function Wait-PortReady {
         [string]$Name,
         [int]$Port,
         [int]$TimeoutSeconds,
-        [string]$LogPath
+        [string]$LogPath,
+        [int]$LogEverySeconds = 20
     )
 
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    $lastNotice = Get-Date
+    $start = Get-Date
+    $deadline = $start.AddSeconds($TimeoutSeconds)
+    $lastNotice = $start.AddSeconds(-10)
+    $lastLogTail = $start.AddSeconds(-1 * $LogEverySeconds)
 
     while ((Get-Date) -lt $deadline) {
         if (Test-PortListening $Port) {
-            Write-Host "$Name is ready on http://127.0.0.1:$Port"
+            $elapsed = [int]((Get-Date) - $start).TotalSeconds
+            Write-Host "$Name is ready on http://127.0.0.1:${Port} after ${elapsed}s"
             return $true
         }
 
-        if (((Get-Date) - $lastNotice).TotalSeconds -ge 5) {
-            Write-Host "Waiting for $Name on port ${Port}..."
-            $lastNotice = Get-Date
+        $now = Get-Date
+        $elapsed = [int]($now - $start).TotalSeconds
+        $remaining = [Math]::Max(0, [int]($deadline - $now).TotalSeconds)
+
+        if (($now - $lastNotice).TotalSeconds -ge 5) {
+            Write-Host "Waiting for $Name on port ${Port}... ${elapsed}s elapsed, ${remaining}s remaining"
+            $lastNotice = $now
+        }
+
+        if (($now - $lastLogTail).TotalSeconds -ge $LogEverySeconds) {
+            if (Test-LogHasFailureClue $LogPath) {
+                Write-Warning "$Name log contains an error clue while waiting. Showing recent lines now."
+                Show-LogTail $Name $LogPath 60
+            } elseif (Test-Path $LogPath) {
+                Write-Host "Recent $Name startup log clue:"
+                Get-Content -Path $LogPath -Tail 8 -ErrorAction SilentlyContinue
+            } else {
+                Write-Host "$Name log has not been created yet: $LogPath"
+            }
+            $lastLogTail = $now
         }
 
         Start-Sleep -Milliseconds 500
     }
 
     Write-Warning "$Name did not become ready on port ${Port} within $TimeoutSeconds seconds."
-    Show-LogTail $Name $LogPath
+    Show-LogTail $Name $LogPath 100
     return $false
 }
 
@@ -133,6 +165,40 @@ function Start-AIStudio {
     Write-Host "Starting AI Studio on http://127.0.0.1:7872"
 }
 
+function Open-StudioWhenReady {
+    param([int]$TimeoutSeconds = 90)
+
+    if (Wait-PortReady "AI Studio" 7872 $TimeoutSeconds $StudioLog 15) {
+        Write-Host "Opening AI Studio in browser."
+        Start-Process "http://127.0.0.1:7872"
+        return $true
+    }
+
+    Write-Warning "AI Studio did not open. Review $StudioLog"
+    return $false
+}
+
+function Start-StudioAndEngine {
+    Write-Host "Starting missing services. Studio will open as soon as it is ready. Fooocus may continue warming in the background."
+    Start-FooocusEngine
+    Start-AIStudio
+
+    $studioReady = Open-StudioWhenReady 90
+    $engineReady = Wait-PortReady "Fooocus Engine" 7865 300 $EngineLog 20
+
+    if ($studioReady -and $engineReady) {
+        Write-Host "Both AI Studio and Fooocus Engine are ready."
+    } elseif ($studioReady -and -not $engineReady) {
+        Write-Warning "AI Studio is open, but Fooocus Engine did not become ready. Hidden engine autofill/generation will not work until Fooocus starts."
+        Write-Host "Try option 4 Cold reset, or open the engine log: notepad logs\studio\latest-fooocus-engine.log"
+    } elseif (-not $studioReady -and $engineReady) {
+        Write-Warning "Fooocus Engine is ready, but AI Studio did not become ready."
+        Write-Host "Open the Studio log: notepad logs\studio\latest-ai-studio.log"
+    } else {
+        Write-Warning "Neither service became ready. Review both logs in logs\studio."
+    }
+}
+
 switch ($Mode) {
     "refresh" {
         Write-Host "Refreshing browser only. No processes stopped."
@@ -143,9 +209,7 @@ switch ($Mode) {
         Stop-PortProcess 7872
         Start-Sleep -Seconds 2
         Start-AIStudio
-        if (Wait-PortReady "AI Studio" 7872 90 $StudioLog) {
-            Start-Process "http://127.0.0.1:7872"
-        }
+        Open-StudioWhenReady 90 | Out-Null
     }
     "cold" {
         Write-Host "Cold reset: stopping Studio and Fooocus, clearing temp session folder, then starting clean."
@@ -154,23 +218,10 @@ switch ($Mode) {
         Remove-Item "$env:TEMP\fooocus" -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path "$env:TEMP\fooocus" -ErrorAction SilentlyContinue | Out-Null
         Start-Sleep -Seconds 2
-        Start-FooocusEngine
-        $engineReady = Wait-PortReady "Fooocus Engine" 7865 180 $EngineLog
-        Start-AIStudio
-        $studioReady = Wait-PortReady "AI Studio" 7872 90 $StudioLog
-        if ($engineReady -and $studioReady) {
-            Start-Process "http://127.0.0.1:7872"
-        }
+        Start-StudioAndEngine
     }
     default {
-        Write-Host "Start/Open: starting missing services and opening AI Studio."
-        Start-FooocusEngine
-        $engineReady = Wait-PortReady "Fooocus Engine" 7865 180 $EngineLog
-        Start-AIStudio
-        $studioReady = Wait-PortReady "AI Studio" 7872 90 $StudioLog
-        if ($engineReady -and $studioReady) {
-            Start-Process "http://127.0.0.1:7872"
-        }
+        Start-StudioAndEngine
     }
 }
 
