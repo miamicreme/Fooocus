@@ -124,6 +124,17 @@ function Stop-PortProcess {
     }
 }
 
+function ConvertTo-ProcessArgument {
+    param([string]$Value)
+
+    if ($null -eq $Value) {
+        return '""'
+    }
+
+    $escaped = $Value.Replace('`', '``').Replace('"', '`"')
+    return '"' + $escaped + '"'
+}
+
 function Start-LoggedWindow {
     param(
         [string]$Title,
@@ -131,14 +142,17 @@ function Start-LoggedWindow {
         [string]$LogName
     )
 
-    Start-Process -FilePath "powershell.exe" -ArgumentList @(
+    $scriptPath = Join-Path $Root "scripts\run_logged_process.ps1"
+    $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        "-File", "scripts\run_logged_process.ps1",
-        "-Title", $Title,
-        "-Command", $Command,
-        "-LogName", $LogName
-    ) -WorkingDirectory $Root
+        "-File", (ConvertTo-ProcessArgument $scriptPath),
+        "-Title", (ConvertTo-ProcessArgument $Title),
+        "-Command", (ConvertTo-ProcessArgument $Command),
+        "-LogName", (ConvertTo-ProcessArgument $LogName)
+    ) -join " "
+
+    Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WorkingDirectory $Root
 }
 
 function Start-FooocusEngine {
