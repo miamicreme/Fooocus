@@ -18,6 +18,15 @@ def test_designed_control_ui_hides_engine_and_adds_downloads() -> None:
     assert "Fooocus Engine" not in source.split("with gr.Tab(")[1]
 
 
+def test_designed_control_ui_adds_safe_send_to_engine_handoff() -> None:
+    source = inspect.getsource(ai_studio_app.build_app)
+
+    assert "Send to Engine" in source
+    assert "build_engine_handoff_text" in source
+    assert "Engine-ready fields to paste into Fooocus" in source
+    assert "Browser safety blocks direct auto-fill" in source
+
+
 def test_fooocus_iframe_is_available_but_not_the_primary_ui() -> None:
     html = fooocus_iframe_html()
 
