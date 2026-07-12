@@ -1,7 +1,9 @@
 param(
-    [int]$EngineWaitSeconds = 420,
+    [switch]$StartEngine,
+    [switch]$OpenBrowser,
+    [int]$EngineWaitSeconds = 180,
     [int]$StudioWaitSeconds = 120,
-    [int]$InitialEngineDelaySeconds = 45
+    [int]$InitialEngineDelaySeconds = 30
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,29 +72,37 @@ function Wait-PortOpen {
     return $false
 }
 
-Write-Host "Starting Studio One UI with engine wait."
+Write-Host "Starting AI Studio Control Center."
 Write-Host "Using Python: $PythonCmd"
-Write-Host "Engine wait: ${EngineWaitSeconds}s. Initial engine delay: ${InitialEngineDelaySeconds}s."
+Write-Host "Engine auto-start: $StartEngine"
 
-if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7865)) {
-    Write-Host "Starting Fooocus engine on http://127.0.0.1:7865"
-    Start-Process -FilePath $PythonCmd -ArgumentList @("scripts\run_fooocus_keepalive.py", "--disable-analytics", "--disable-in-browser") -WorkingDirectory $RepoRoot -RedirectStandardOutput $EngineOutLog -RedirectStandardError $EngineErrLog -WindowStyle Minimized
-    Write-Host "Waiting initial ${InitialEngineDelaySeconds}s for model/UI warmup before checking engine port..."
-    Start-Sleep -Seconds $InitialEngineDelaySeconds
+if ($StartEngine) {
+    if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7865)) {
+        Write-Host "Starting optional Fooocus engine on http://127.0.0.1:7865"
+        Start-Process -FilePath $PythonCmd -ArgumentList @("scripts\run_fooocus_keepalive.py", "--disable-analytics", "--disable-in-browser") -WorkingDirectory $RepoRoot -RedirectStandardOutput $EngineOutLog -RedirectStandardError $EngineErrLog -WindowStyle Minimized
+        Write-Host "Waiting initial ${InitialEngineDelaySeconds}s for model/UI warmup before checking engine port..."
+        Start-Sleep -Seconds $InitialEngineDelaySeconds
+    }
+    else {
+        Write-Host "Fooocus engine is already running on http://127.0.0.1:7865"
+    }
+
+    $engineReady = Wait-PortOpen -Name "Fooocus Engine" -HostName "127.0.0.1" -Port 7865 -TimeoutSeconds $EngineWaitSeconds
+    if (-not $engineReady) {
+        Show-RecentLog -Label "Fooocus engine" -OutLog $EngineOutLog -ErrLog $EngineErrLog
+        Write-Host "Continuing with Studio only. The hidden engine panel will stay unavailable until Fooocus is fixed."
+    }
 }
 else {
-    Write-Host "Fooocus engine is already running on http://127.0.0.1:7865"
+    Write-Host "Skipping Fooocus engine auto-start. This prevents repeated engine crash loops and duplicate windows."
+    Write-Host "Use RUN_FOOOCUS_ENGINE_ONLY.bat later when you want to test the engine manually."
 }
 
-$engineReady = Wait-PortOpen -Name "Fooocus Engine" -HostName "127.0.0.1" -Port 7865 -TimeoutSeconds $EngineWaitSeconds
-if (-not $engineReady) {
-    Show-RecentLog -Label "Fooocus engine" -OutLog $EngineOutLog -ErrLog $EngineErrLog
-    Write-Host "Studio will still start, but the hidden engine panel may not work until Fooocus finishes or the log error is fixed."
-}
-
+$startedStudio = $false
 if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7872)) {
     Write-Host "Starting AI Studio on http://127.0.0.1:7872"
     Start-Process -FilePath $PythonCmd -ArgumentList @("ai_studio_app.py") -WorkingDirectory $RepoRoot -RedirectStandardOutput $StudioOutLog -RedirectStandardError $StudioErrLog -WindowStyle Minimized
+    $startedStudio = $true
 }
 else {
     Write-Host "AI Studio is already running on http://127.0.0.1:7872"
@@ -100,8 +110,13 @@ else {
 
 $studioReady = Wait-PortOpen -Name "AI Studio" -HostName "127.0.0.1" -Port 7872 -TimeoutSeconds $StudioWaitSeconds
 if ($studioReady) {
-    Write-Host "Opening AI Studio in browser."
-    Start-Process "http://127.0.0.1:7872"
+    if ($OpenBrowser -or $startedStudio) {
+        Write-Host "Opening AI Studio in browser once."
+        Start-Process "http://127.0.0.1:7872"
+    }
+    else {
+        Write-Host "AI Studio is already open/running. Not opening another browser tab."
+    }
 }
 else {
     Show-RecentLog -Label "AI Studio" -OutLog $StudioOutLog -ErrLog $StudioErrLog
@@ -109,7 +124,7 @@ else {
 
 Write-Host ""
 Write-Host "Main UI: http://127.0.0.1:7872"
-Write-Host "Hidden engine: http://127.0.0.1:7865"
+Write-Host "Optional hidden engine: http://127.0.0.1:7865"
 Write-Host "Engine stdout log: $EngineOutLog"
 Write-Host "Engine stderr log: $EngineErrLog"
 Write-Host "Studio stdout log: $StudioOutLog"
