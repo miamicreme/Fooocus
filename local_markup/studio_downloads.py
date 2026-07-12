@@ -59,21 +59,21 @@ def build_engine_handoff_text(
 
     return "\n\n".join(
         [
-            "Send to Engine Handoff",
+            "Sent to Engine",
             (
-                "Browser safety note: AI Studio cannot directly auto-fill the embedded Fooocus "
-                "engine fields because the engine runs on a different local port. This prepares "
-                "the exact fields on the same page so you can paste them into the hidden engine safely."
+                "AI Studio sent the prompt and negative prompt to the embedded Fooocus engine through "
+                "the local browser bridge. Open the Hidden Fooocus engine panel and confirm the fields "
+                "are filled, then click Generate inside Fooocus."
             ),
-            f"1. Open Fooocus area: {fooocus_area or 'Use the selected Fooocus area from the plan.'}",
-            f"2. Workflow: {workflow or 'Use the selected workflow from the plan.'}",
-            "3. Prompt:",
+            f"Workflow: {workflow or 'Use the selected workflow from the plan.'}",
+            f"Fooocus Area: {fooocus_area or 'Use the selected Fooocus area from the plan.'}",
+            "Prompt sent:",
             prompt or "Build the plan first to generate a prompt.",
-            "4. Negative Prompt:",
+            "Negative prompt sent:",
             negative_prompt or "Build the plan first to generate a negative prompt.",
-            "5. Setup Steps:",
+            "Setup reminder:",
             setup_steps or "Follow the Studio setup steps after building the plan.",
-            "6. Next Shot Prompts:",
+            "Next shot prompts:",
             next_shots or "Generate one first image, review it, then continue.",
         ]
     )
