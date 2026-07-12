@@ -30,7 +30,7 @@ def test_build_prompt_pack_text_contains_copy_ready_sections() -> None:
     assert "Setup Steps:" in text
 
 
-def test_build_engine_handoff_text_prepares_safe_same_page_fields() -> None:
+def test_build_engine_handoff_text_reports_autofill_send_status() -> None:
     text = build_engine_handoff_text(
         workflow="Image Prompt",
         fooocus_area="Image Prompt tab",
@@ -40,9 +40,10 @@ def test_build_engine_handoff_text_prepares_safe_same_page_fields() -> None:
         next_shots="Shot 2",
     )
 
-    assert "Send to Engine Handoff" in text
-    assert "Browser safety note" in text
-    assert "auto-fill" in text
+    assert "Sent to Engine" in text
+    assert "browser bridge" in text
+    assert "Open the Hidden Fooocus engine" in text
+    assert "click Generate" in text
     assert "Image Prompt tab" in text
     assert "clean portrait" in text
     assert "blur" in text
