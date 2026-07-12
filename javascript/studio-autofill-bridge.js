@@ -37,6 +37,20 @@
         return true;
     }
 
+    function sendAutofillResult(event, result) {
+        if (!event.source || !event.origin) {
+            return;
+        }
+        event.source.postMessage({
+            type: "fooocus-studio-autofill-result",
+            promptFilled: result.promptFilled,
+            negativeFilled: result.negativeFilled,
+            workflow: result.workflow || "",
+            fooocusArea: result.fooocusArea || "",
+            updatedAt: result.updatedAt
+        }, event.origin);
+    }
+
     window.addEventListener("message", function (event) {
         if (!allowedOrigins.has(event.origin)) {
             return;
@@ -57,6 +71,8 @@
             fooocusArea: payload.fooocus_area || "",
             updatedAt: Date.now()
         };
+
+        sendAutofillResult(event, window.__fooocusStudioLastAutofill);
 
         if (!promptFilled || !negativeFilled) {
             console.warn("Fooocus Studio autofill could not find one or more target fields.", window.__fooocusStudioLastAutofill);

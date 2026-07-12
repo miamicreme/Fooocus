@@ -32,6 +32,28 @@ def test_designed_control_ui_adds_safe_send_to_engine_autofill() -> None:
     assert "studio_negative_prompt" in source
 
 
+def test_designed_control_ui_adds_animated_status_panel() -> None:
+    source = inspect.getsource(ai_studio_app.build_app)
+    script = studio_engine_bridge_script()
+
+    assert "studio_status_panel_html" in source
+    assert "studio_build_plan_button" in source
+    assert "fooocusStudioSetStatus" in script
+    assert "studio_progress_fill" in script
+    assert "studio_toast" in script
+    assert "fooocus-studio-autofill-result" in script
+
+
+def test_designed_control_ui_adds_launcher_reset_tab() -> None:
+    source = inspect.getsource(ai_studio_app.build_app)
+
+    assert "Launcher / Reset" in source
+    assert "launcher_controls_markdown" in source
+    assert "START_AI_IMAGE_STUDIO.bat" in source
+    assert "Hot reset" in source
+    assert "Cold reset" in source
+
+
 def test_fooocus_iframe_is_available_but_not_the_primary_ui() -> None:
     html = fooocus_iframe_html()
 
