@@ -43,6 +43,13 @@ def test_reset_helper_supports_logs_and_port_restart_modes() -> None:
     assert "Stop-PortProcess 7865" in content
 
 
+def test_reset_helper_uses_powershell_safe_variable_colon_syntax() -> None:
+    content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
+
+    assert "$Port:" not in content
+    assert "${Port}:" in content
+
+
 def test_logged_process_runner_keeps_exact_crash_logs() -> None:
     content = Path("scripts/run_logged_process.ps1").read_text(encoding="utf-8")
 

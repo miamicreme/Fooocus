@@ -33,10 +33,10 @@ function Stop-PortProcess {
 
     foreach ($processId in $pids) {
         try {
-            Write-Host "Stopping process on port $Port: PID $processId"
+            Write-Host "Stopping process on port ${Port}: PID $processId"
             Stop-Process -Id $processId -Force -ErrorAction Stop
         } catch {
-            Write-Warning "Could not stop PID $processId on port $Port: $($_.Exception.Message)"
+            Write-Warning "Could not stop PID $processId on port ${Port}: $($_.Exception.Message)"
         }
     }
 }
