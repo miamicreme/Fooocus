@@ -13,6 +13,9 @@ $ErrorActionPreference = "Continue"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $Root
 
+$env:PYTHONUNBUFFERED = "1"
+$env:PYTHONIOENCODING = "utf-8"
+
 $LogDir = Join-Path $Root "logs\studio"
 if (-not (Test-Path $LogDir)) {
     New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
@@ -37,12 +40,13 @@ Remove-Item $LatestPath -Force -ErrorAction SilentlyContinue
 Write-LogLine "Starting $Title"
 Write-LogLine "Repository: $Root"
 Write-LogLine "Command: $Command"
+Write-LogLine "Environment: PYTHONUNBUFFERED=$env:PYTHONUNBUFFERED PYTHONIOENCODING=$env:PYTHONIOENCODING"
 Write-LogLine "Log file: $LogPath"
 Write-LogLine "Latest log: $LatestPath"
 Write-LogLine "------------------------------------------------------------"
 
 try {
-    cmd.exe /d /c "$Command" 2>&1 | ForEach-Object {
+    cmd.exe /d /s /c "$Command" 2>&1 | ForEach-Object {
         $text = [string]$_
         Write-Host $text
         Add-Content -Path $LogPath -Value $text -Encoding UTF8
