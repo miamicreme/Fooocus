@@ -4,6 +4,7 @@ import inspect
 
 import ai_studio_app
 from ai_studio_app import build_app, fooocus_iframe_html, send_to_engine_js, studio_engine_bridge_script
+from local_markup.studio_control_ui import launcher_controls_markdown
 
 
 def test_designed_control_ui_hides_engine_and_adds_downloads() -> None:
@@ -46,12 +47,13 @@ def test_designed_control_ui_adds_animated_status_panel() -> None:
 
 def test_designed_control_ui_adds_launcher_reset_tab() -> None:
     source = inspect.getsource(ai_studio_app.build_app)
+    launcher_text = launcher_controls_markdown()
 
     assert "Launcher / Reset" in source
     assert "launcher_controls_markdown" in source
-    assert "START_AI_IMAGE_STUDIO.bat" in source
-    assert "Hot reset" in source
-    assert "Cold reset" in source
+    assert "START_AI_IMAGE_STUDIO.bat" in launcher_text
+    assert "Hot reset" in launcher_text
+    assert "Cold reset" in launcher_text
 
 
 def test_fooocus_iframe_is_available_but_not_the_primary_ui() -> None:
