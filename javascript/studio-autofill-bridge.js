@@ -47,6 +47,8 @@
             negativeFilled: result.negativeFilled,
             workflow: result.workflow || "",
             fooocusArea: result.fooocusArea || "",
+            setup_steps: result.setup_steps || "",
+            next_shots: result.next_shots || "",
             updatedAt: result.updatedAt
         }, event.origin);
     }
@@ -69,6 +71,8 @@
             negativeFilled: negativeFilled,
             workflow: payload.workflow || "",
             fooocusArea: payload.fooocus_area || "",
+            setup_steps: payload.setup_steps || "",
+            next_shots: payload.next_shots || "",
             updatedAt: Date.now()
         };
 
