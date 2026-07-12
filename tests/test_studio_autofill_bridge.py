@@ -58,6 +58,19 @@ def test_studio_and_engine_bridge_share_message_contract() -> None:
     assert "payload.type !== \"fooocus-studio-autofill\"" in engine_script
 
 
+def test_fooocus_bridge_sends_acknowledgement_back_to_studio() -> None:
+    engine_script = BRIDGE_PATH.read_text(encoding="utf-8")
+    studio_script = ai_studio_app.studio_engine_bridge_script()
+
+    assert "fooocus-studio-autofill-result" in engine_script
+    assert "fooocus-studio-autofill-result" in studio_script
+    assert "event.source.postMessage" in engine_script
+    assert "promptFilled" in engine_script
+    assert "negativeFilled" in engine_script
+    assert "Engine fields filled" in studio_script
+    assert "partial-fill" in studio_script
+
+
 def test_fooocus_bridge_does_not_auto_click_generate() -> None:
     source = BRIDGE_PATH.read_text(encoding="utf-8").lower()
 
@@ -73,3 +86,15 @@ def test_fooocus_bridge_records_last_autofill_for_debugging() -> None:
     assert "promptFilled" in source
     assert "negativeFilled" in source
     assert "updatedAt" in source
+
+
+def test_studio_status_panel_tracks_real_handoff_states() -> None:
+    script = ai_studio_app.studio_engine_bridge_script()
+
+    assert "Planning image workflow" in script
+    assert "Plan ready" in script
+    assert "Sending to engine" in script
+    assert "Sent, waiting for confirmation" in script
+    assert "Engine fields filled" in script
+    assert "Studio is selecting" in script
+    assert "This progress reflects planning only" in script
