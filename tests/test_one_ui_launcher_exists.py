@@ -5,8 +5,9 @@ from pathlib import Path
 
 def test_one_ui_launcher_routes_through_engine_wait_script() -> None:
     content = Path("RUN_STUDIO_ONE_UI.bat").read_text(encoding="utf-8")
+    normalized = content.replace("/", "\\")
 
-    assert "scripts\run_studio_one_ui.ps1" in content
+    assert r"scripts\run_studio_one_ui.ps1" in normalized
     assert "engine wait" in content.lower()
 
 
