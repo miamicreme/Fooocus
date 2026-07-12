@@ -24,6 +24,11 @@ if (Test-Path ".venv\Scripts\python.exe") {
     $PythonCmd = ".venv\Scripts\python.exe"
 }
 
+# Stable local engine profile for 6GB-class NVIDIA cards.
+# This avoids the native 0xC0000005 crash seen after VAE/attention startup by keeping VAE on CPU,
+# using split attention, disabling xformers, and forcing low VRAM mode.
+$EngineSafeArgs = "--disable-analytics --disable-in-browser --attention-split --vae-in-cpu --always-low-vram --disable-xformers"
+
 function Test-PortListening {
     param([int]$Port)
     $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
@@ -166,7 +171,8 @@ function Start-FooocusEngine {
         New-Item -ItemType Directory -Path "$env:TEMP\fooocus" | Out-Null
     }
 
-    Start-LoggedWindow "Fooocus Engine" "$PythonCmd -u scripts\run_fooocus_engine_watchdog.py --disable-analytics --disable-in-browser" "fooocus-engine"
+    Write-Host "Using stable Fooocus engine profile: $EngineSafeArgs"
+    Start-LoggedWindow "Fooocus Engine" "$PythonCmd -u scripts\run_fooocus_engine_watchdog.py $EngineSafeArgs" "fooocus-engine"
     Write-Host "Starting Fooocus engine watchdog on http://127.0.0.1:7865"
 }
 
