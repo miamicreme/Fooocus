@@ -22,6 +22,7 @@ local_markup/studio_downloads.py
 tests/test_studio_control_ui.py
 tests/test_studio_downloads.py
 tests/test_ai_studio_app_designed_control_ui.py
+tests/test_launch_util_temp_cleanup.py
 ```
 
 Updated:
@@ -29,7 +30,12 @@ Updated:
 ```text
 ai_studio_app.py
 tests/test_ai_studio_app_one_ui_copy.py
+modules/launch_util.py
 ```
+
+## Startup Fix
+
+`delete_folder_content()` now recreates the temp folder if it is missing. This prevents startup from crashing when `C:\Users\<user>\AppData\Local\Temp\fooocus` was already removed or never existed.
 
 ## User Flow
 
@@ -50,6 +56,6 @@ The engine is visually hidden, not removed. The UI does not directly call the Fo
 ## Validation
 
 ```powershell
-python -m py_compile ai_studio_app.py local_markup\studio_control_ui.py local_markup\studio_downloads.py
-python -m pytest tests/test_studio_control_ui.py tests/test_studio_downloads.py tests/test_ai_studio_app_designed_control_ui.py tests/test_ai_studio_app_one_ui_copy.py -q
+python -m py_compile ai_studio_app.py local_markup\studio_control_ui.py local_markup\studio_downloads.py modules\launch_util.py
+python -m pytest tests/test_studio_control_ui.py tests/test_studio_downloads.py tests/test_ai_studio_app_designed_control_ui.py tests/test_ai_studio_app_one_ui_copy.py tests/test_launch_util_temp_cleanup.py -q
 ```
