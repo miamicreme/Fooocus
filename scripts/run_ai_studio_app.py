@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import sys
 from datetime import datetime
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 def log_boot(message: str) -> None:
@@ -8,6 +15,7 @@ def log_boot(message: str) -> None:
 
 
 def main() -> None:
+    log_boot(f"AI Studio boot: repo root is {REPO_ROOT}")
     log_boot("AI Studio boot: importing ai_studio_app")
     import ai_studio_app
 
