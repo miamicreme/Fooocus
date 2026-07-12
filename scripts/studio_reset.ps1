@@ -10,6 +10,11 @@ Set-Location $Root
 $env:GRADIO_ANALYTICS_ENABLED = "False"
 $env:GRADIO_VERSION_CHECK = "False"
 
+$LogDir = Join-Path $Root "logs\studio"
+if (-not (Test-Path $LogDir)) {
+    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+}
+
 $PythonCmd = "python"
 if (Test-Path ".venv\Scripts\python.exe") {
     $PythonCmd = ".venv\Scripts\python.exe"
@@ -36,12 +41,21 @@ function Stop-PortProcess {
     }
 }
 
-function Start-CmdWindow {
+function Start-LoggedWindow {
     param(
         [string]$Title,
-        [string]$Command
+        [string]$Command,
+        [string]$LogName
     )
-    Start-Process -FilePath "cmd.exe" -ArgumentList @("/k", "title $Title && $Command") -WorkingDirectory $Root
+
+    Start-Process -FilePath "powershell.exe" -ArgumentList @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "scripts\run_logged_process.ps1",
+        "-Title", $Title,
+        "-Command", $Command,
+        "-LogName", $LogName
+    ) -WorkingDirectory $Root
 }
 
 function Start-FooocusEngine {
@@ -54,7 +68,7 @@ function Start-FooocusEngine {
         New-Item -ItemType Directory -Path "$env:TEMP\fooocus" | Out-Null
     }
 
-    Start-CmdWindow "Fooocus Engine" "$PythonCmd scripts\run_fooocus_keepalive.py --disable-analytics --disable-in-browser"
+    Start-LoggedWindow "Fooocus Engine" "$PythonCmd scripts\run_fooocus_keepalive.py --disable-analytics --disable-in-browser" "fooocus-engine"
     Write-Host "Starting Fooocus engine on http://127.0.0.1:7865"
 }
 
@@ -64,7 +78,7 @@ function Start-AIStudio {
         return
     }
 
-    Start-CmdWindow "AI Studio" "$PythonCmd ai_studio_app.py"
+    Start-LoggedWindow "AI Studio" "$PythonCmd ai_studio_app.py" "ai-studio"
     Write-Host "Starting AI Studio on http://127.0.0.1:7872"
 }
 
@@ -107,3 +121,6 @@ switch ($Mode) {
 Write-Host ""
 Write-Host "AI Studio:      http://127.0.0.1:7872"
 Write-Host "Fooocus Engine: http://127.0.0.1:7865"
+Write-Host "Logs:           $LogDir"
+Write-Host "Latest Studio:  logs\studio\latest-ai-studio.log"
+Write-Host "Latest Engine:  logs\studio\latest-fooocus-engine.log"
