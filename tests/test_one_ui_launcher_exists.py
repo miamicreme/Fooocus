@@ -65,6 +65,18 @@ def test_reset_helper_prints_live_log_clues_while_waiting() -> None:
     assert "Try option 4 Cold reset" in content
 
 
+def test_reset_helper_quotes_child_powershell_arguments_with_spaces() -> None:
+    content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
+
+    assert "function ConvertTo-ProcessArgument" in content
+    assert '"-Title", (ConvertTo-ProcessArgument $Title)' in content
+    assert '"-Command", (ConvertTo-ProcessArgument $Command)' in content
+    assert '"-LogName", (ConvertTo-ProcessArgument $LogName)' in content
+    assert '"-Title", $Title' not in content
+    assert '"-Command", $Command' not in content
+    assert '"-LogName", $LogName' not in content
+
+
 def test_reset_helper_uses_powershell_safe_variable_colon_syntax() -> None:
     content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
 
