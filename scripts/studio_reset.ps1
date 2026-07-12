@@ -56,7 +56,7 @@ function Test-LogHasFailureClue {
     }
 
     $tail = Get-Content -Path $LogPath -Tail 80 -ErrorAction SilentlyContinue
-    return ($tail -match "Traceback|ModuleNotFoundError|ImportError|RuntimeError|ERROR:|Exception|exited with code [1-9]").Count -gt 0
+    return ($tail -match "Traceback|ModuleNotFoundError|ImportError|RuntimeError|ERROR:|Exception|exited with code [1-9]|exited with code -1073741819|Fooocus watchdog: child exited").Count -gt 0
 }
 
 function Wait-PortReady {
@@ -166,8 +166,8 @@ function Start-FooocusEngine {
         New-Item -ItemType Directory -Path "$env:TEMP\fooocus" | Out-Null
     }
 
-    Start-LoggedWindow "Fooocus Engine" "$PythonCmd -u scripts\run_fooocus_keepalive.py --disable-analytics --disable-in-browser" "fooocus-engine"
-    Write-Host "Starting Fooocus engine on http://127.0.0.1:7865"
+    Start-LoggedWindow "Fooocus Engine" "$PythonCmd -u scripts\run_fooocus_engine_watchdog.py --disable-analytics --disable-in-browser" "fooocus-engine"
+    Write-Host "Starting Fooocus engine watchdog on http://127.0.0.1:7865"
 }
 
 function Start-AIStudio {
@@ -202,7 +202,7 @@ function Start-StudioAndEngine {
     $engineReady = Wait-PortReady "Fooocus Engine" 7865 300 $EngineLog 20
 
     if ($studioReady -and $engineReady) {
-        Write-Host "Both AI Studio and Fooocus Engine are ready."
+        Write-Host "Both AI Studio and Fooocus Engine are ready. Watchdog remains active for Fooocus restarts."
     } elseif ($studioReady -and -not $engineReady) {
         Write-Warning "AI Studio is open, but Fooocus Engine did not become ready. Hidden engine autofill/generation will not work until Fooocus starts."
         Write-Host "Try option 4 Cold reset, or open the engine log: notepad logs\studio\latest-fooocus-engine.log"
