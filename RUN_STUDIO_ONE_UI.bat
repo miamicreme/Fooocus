@@ -8,13 +8,11 @@ set GRADIO_VERSION_CHECK=False
 
 if not exist "%TEMP%\fooocus" mkdir "%TEMP%\fooocus"
 
-start "Fooocus Engine" cmd /k "%PYTHON_CMD% scripts\run_fooocus_keepalive.py --disable-analytics --disable-in-browser"
-timeout /t 12 /nobreak >nul
-start "AI Studio One UI" cmd /k "%PYTHON_CMD% ai_studio_app.py"
-
-echo One UI is starting.
-echo Work here: http://127.0.0.1:7872
-echo Fooocus engine: http://127.0.0.1:7865
+echo Starting AI Studio One UI with engine wait...
+echo This waits for Fooocus engine before opening the browser.
 echo.
-echo Keep both opened command windows running.
-pause
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\run_studio_one_ui.ps1
+
+echo.
+echo Launcher stopped. Press any key to close.
+pause >nul
