@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-import inspect
 
 import ai_studio_app
-import modules.ui_gradio_extensions as ui_gradio_extensions
 
 
 BRIDGE_PATH = Path("javascript/studio-autofill-bridge.js")
+GRADIO_EXTENSIONS_PATH = Path("modules/ui_gradio_extensions.py")
 
 
 def test_fooocus_autofill_bridge_script_exists_and_listens_for_studio_message() -> None:
@@ -30,8 +29,8 @@ def test_fooocus_autofill_bridge_targets_prompt_fields() -> None:
     assert "dispatchEvent(new Event(\"change\"" in source
 
 
-def test_gradio_extension_loads_studio_autofill_bridge() -> None:
-    source = inspect.getsource(ui_gradio_extensions.javascript_html)
+def test_gradio_extension_loads_studio_autofill_bridge_without_importing_runtime_args() -> None:
+    source = GRADIO_EXTENSIONS_PATH.read_text(encoding="utf-8")
 
     assert "studio-autofill-bridge.js" in source
     assert "studio_autofill_bridge_js_path" in source
