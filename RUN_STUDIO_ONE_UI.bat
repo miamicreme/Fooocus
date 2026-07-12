@@ -6,8 +6,10 @@ if exist ".venv\Scripts\python.exe" set PYTHON_CMD=.venv\Scripts\python.exe
 set GRADIO_ANALYTICS_ENABLED=False
 set GRADIO_VERSION_CHECK=False
 
-start "Fooocus Engine" cmd /k "%PYTHON_CMD% launch.py --disable-analytics"
-timeout /t 8 /nobreak >nul
+if not exist "%TEMP%\fooocus" mkdir "%TEMP%\fooocus"
+
+start "Fooocus Engine" cmd /k "%PYTHON_CMD% scripts\run_fooocus_keepalive.py --disable-analytics --disable-in-browser"
+timeout /t 12 /nobreak >nul
 start "AI Studio One UI" cmd /k "%PYTHON_CMD% ai_studio_app.py"
 
 echo One UI is starting.
