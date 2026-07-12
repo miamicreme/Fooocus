@@ -8,8 +8,8 @@ set GRADIO_VERSION_CHECK=False
 
 if not exist "%TEMP%\fooocus" mkdir "%TEMP%\fooocus"
 
-echo Starting AI Studio One UI with engine wait...
-echo This waits for Fooocus engine before opening the browser.
+echo Starting AI Studio Control Center.
+echo Engine auto-start is OFF to prevent crash loops and duplicate windows.
 echo.
 powershell -ExecutionPolicy Bypass -NoProfile -File scripts\run_studio_one_ui.ps1
 
