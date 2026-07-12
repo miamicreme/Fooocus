@@ -77,6 +77,23 @@ def test_reset_helper_quotes_child_powershell_arguments_with_spaces() -> None:
     assert '"-LogName", $LogName' not in content
 
 
+def test_reset_helper_uses_unbuffered_python_startup_wrappers() -> None:
+    content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
+
+    assert "$env:PYTHONUNBUFFERED = \"1\"" in content
+    assert r"-u scripts\run_ai_studio_app.py" in content
+    assert r"-u scripts\run_fooocus_keepalive.py" in content
+
+
+def test_ai_studio_runner_emits_boot_checkpoints() -> None:
+    content = Path("scripts/run_ai_studio_app.py").read_text(encoding="utf-8")
+
+    assert "AI Studio boot: importing ai_studio_app" in content
+    assert "AI Studio boot: building Gradio UI" in content
+    assert "AI Studio boot: launching on http://127.0.0.1:7872" in content
+    assert "flush=True" in content
+
+
 def test_reset_helper_uses_powershell_safe_variable_colon_syntax() -> None:
     content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
 
@@ -91,3 +108,11 @@ def test_logged_process_runner_keeps_exact_crash_logs() -> None:
     assert "Latest log shortcut" in content
     assert "exited with code" in content
     assert "stack trace above" in content
+
+
+def test_logged_process_runner_forces_unbuffered_python_output() -> None:
+    content = Path("scripts/run_logged_process.ps1").read_text(encoding="utf-8")
+
+    assert "$env:PYTHONUNBUFFERED = \"1\"" in content
+    assert "$env:PYTHONIOENCODING = \"utf-8\"" in content
+    assert "Environment: PYTHONUNBUFFERED" in content
