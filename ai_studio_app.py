@@ -8,7 +8,7 @@ from local_markup.studio_usage_guide import studio_usage_markdown
 from local_markup.studio_one_ui_note import FOOOCUS_ENGINE_URL, one_ui_note_markdown
 from local_markup.studio_control_ui import CONTROL_UI_CSS, engine_hidden_note, history_gallery_empty_note, studio_hero_markdown
 from local_markup.studio_copy_controls import copy_controls_summary
-from local_markup.studio_downloads import write_history_download, write_prompt_pack
+from local_markup.studio_downloads import build_engine_handoff_text, write_history_download, write_prompt_pack
 
 
 STYLE_NAMES = list_style_names()
@@ -91,6 +91,14 @@ def build_app():
                 adapter_preview = gr.Markdown(label="Adapter preview")
                 history_preview = gr.Markdown(label="History preview")
 
+            with gr.Accordion("Send to Engine", open=True):
+                gr.Markdown(
+                    "Click **Send to Engine** after building the plan. Browser safety blocks direct auto-fill "
+                    "into the embedded Fooocus iframe, so this prepares copy-ready engine fields on this same page."
+                )
+                send_to_engine_btn = gr.Button("Send to Engine", variant="primary")
+                engine_handoff = copyable_textbox(label="Engine-ready fields to paste into Fooocus", lines=14, interactive=False)
+
             with gr.Row():
                 download_prompt_pack_btn = gr.Button("Download Prompt Pack", variant="secondary")
                 download_history_btn = gr.Button("Download Session History", variant="secondary")
@@ -118,6 +126,12 @@ def build_app():
                 build_studio_workflow_outputs,
                 inputs=[goal, image_1, image_2, image_3, wants_identity, wants_exact_edit, wants_bundle, vram_gb],
                 outputs=[agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area, shot_prompts, handoff_recipe, adapter_preview, history_preview],
+                queue=False,
+            )
+            send_to_engine_btn.click(
+                build_engine_handoff_text,
+                inputs=[selected_tool, selected_area, primary_prompt, negative_prompt, handoff_recipe, shot_prompts],
+                outputs=engine_handoff,
                 queue=False,
             )
             download_prompt_pack_btn.click(
@@ -170,9 +184,10 @@ def build_app():
                 "2. Work from `http://127.0.0.1:7872`.\n"
                 "3. Use **Studio Control Center** first.\n"
                 "4. Click **Build My Fooocus Plan**.\n"
-                "5. Use copy buttons on every output box.\n"
-                "6. Open **Hidden Fooocus engine** only when ready.\n"
-                "7. Paste, generate one image, review, then continue.\n\n"
+                "5. Click **Send to Engine** to prepare engine-ready fields.\n"
+                "6. Use copy buttons on every output box.\n"
+                "7. Open **Hidden Fooocus engine** only when ready.\n"
+                "8. Paste, generate one image, review, then continue.\n\n"
                 "This is still a safe manual handoff. The hidden engine panel is not called automatically."
             )
 
