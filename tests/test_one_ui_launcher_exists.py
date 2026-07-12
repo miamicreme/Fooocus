@@ -61,6 +61,8 @@ def test_reset_helper_prints_live_log_clues_while_waiting() -> None:
     assert "Test-LogHasFailureClue" in content
     assert "Recent $Name startup log clue" in content
     assert "Traceback|ModuleNotFoundError|ImportError|RuntimeError|ERROR:|Exception" in content
+    assert "exited with code -1073741819" in content
+    assert "Fooocus watchdog: child exited" in content
     assert "Show-LogTail $Name $LogPath 100" in content
     assert "Try option 4 Cold reset" in content
 
@@ -82,7 +84,17 @@ def test_reset_helper_uses_unbuffered_python_startup_wrappers() -> None:
 
     assert "$env:PYTHONUNBUFFERED = \"1\"" in content
     assert r"-u scripts\run_ai_studio_app.py" in content
-    assert r"-u scripts\run_fooocus_keepalive.py" in content
+    assert r"-u scripts\run_fooocus_engine_watchdog.py" in content
+
+
+def test_fooocus_engine_watchdog_restarts_native_crashes() -> None:
+    content = Path("scripts/run_fooocus_engine_watchdog.py").read_text(encoding="utf-8")
+
+    assert "MAX_RESTARTS = 2" in content
+    assert "subprocess.Popen" in content
+    assert "Fooocus watchdog: child exited with code" in content
+    assert "restarting Fooocus after exit code" in content
+    assert "launch.py" in content
 
 
 def test_ai_studio_runner_emits_boot_checkpoints() -> None:
