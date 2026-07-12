@@ -87,6 +87,17 @@ def test_reset_helper_uses_unbuffered_python_startup_wrappers() -> None:
     assert r"-u scripts\run_fooocus_engine_watchdog.py" in content
 
 
+def test_studio_launcher_uses_stable_fooocus_engine_profile() -> None:
+    content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
+
+    assert "$EngineSafeArgs" in content
+    assert "--attention-split" in content
+    assert "--vae-in-cpu" in content
+    assert "--always-low-vram" in content
+    assert "--disable-xformers" in content
+    assert "Using stable Fooocus engine profile" in content
+
+
 def test_fooocus_engine_watchdog_restarts_native_crashes() -> None:
     content = Path("scripts/run_fooocus_engine_watchdog.py").read_text(encoding="utf-8")
 
