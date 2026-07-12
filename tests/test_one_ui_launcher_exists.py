@@ -100,10 +100,19 @@ def test_fooocus_engine_watchdog_restarts_native_crashes() -> None:
 def test_ai_studio_runner_emits_boot_checkpoints() -> None:
     content = Path("scripts/run_ai_studio_app.py").read_text(encoding="utf-8")
 
+    assert "AI Studio boot: repo root is" in content
     assert "AI Studio boot: importing ai_studio_app" in content
     assert "AI Studio boot: building Gradio UI" in content
     assert "AI Studio boot: launching on http://127.0.0.1:7872" in content
     assert "flush=True" in content
+
+
+def test_ai_studio_runner_adds_repo_root_to_import_path() -> None:
+    content = Path("scripts/run_ai_studio_app.py").read_text(encoding="utf-8")
+
+    assert "REPO_ROOT = Path(__file__).resolve().parents[1]" in content
+    assert "sys.path.insert(0, str(REPO_ROOT))" in content
+    assert "import ai_studio_app" in content
 
 
 def test_reset_helper_uses_powershell_safe_variable_colon_syntax() -> None:
