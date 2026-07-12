@@ -5,8 +5,7 @@ from local_markup.fooocus_feature_playbook import build_feature_reasoning
 from local_markup.fooocus_feature_catalog import list_features_markdown
 from local_markup.style_explainer import describe_style_markdown, list_style_names, style_recommendations_for_goal
 from local_markup.studio_usage_guide import studio_usage_markdown
-from local_markup.studio_one_ui_note import FOOOCUS_ENGINE_URL, one_ui_note_markdown
-from local_markup.studio_control_ui import CONTROL_UI_CSS, engine_hidden_note, history_gallery_empty_note, studio_hero_markdown
+from local_markup.studio_control_ui import CONTROL_UI_CSS, history_gallery_empty_note, studio_hero_markdown
 from local_markup.studio_copy_controls import copy_controls_summary
 from local_markup.studio_downloads import write_history_download, write_prompt_pack
 
@@ -35,14 +34,6 @@ def feature_catalog_markdown():
     return list_features_markdown()
 
 
-def fooocus_iframe_html():
-    return (
-        f'<iframe src="{FOOOCUS_ENGINE_URL}" '
-        'style="width:100%; height:78vh; border:1px solid #333; border-radius:12px;" '
-        'title="Fooocus Engine"></iframe>'
-    )
-
-
 def build_app():
     with gr.Blocks(title="AI Image Studio", css=CONTROL_UI_CSS) as demo:
         gr.HTML(value=studio_hero_markdown())
@@ -52,7 +43,7 @@ def build_app():
                 with gr.Column(scale=1):
                     gr.Markdown(
                         "## Create the plan\n"
-                        "Start here. The raw Fooocus engine stays hidden until you are ready to paste and generate."
+                        "Start here. The Studio is stable even if the local Fooocus engine is not running yet."
                     )
                     with gr.Accordion("Fast no-friction instructions", open=True):
                         gr.Markdown(value=studio_usage_markdown())
@@ -106,10 +97,11 @@ def build_app():
                     "For now, use **Download Prompt Pack** and **Download Session History**."
                 )
 
-            with gr.Accordion("Hidden Fooocus engine", open=False):
-                gr.Markdown(value=engine_hidden_note())
-                gr.Markdown(value=one_ui_note_markdown())
-                gr.HTML(value=fooocus_iframe_html())
+            with gr.Accordion("Engine status", open=False):
+                gr.Markdown(
+                    "The local Fooocus engine is intentionally not embedded here while it is unstable on this machine.\n\n"
+                    "Use `RUN_FOOOCUS_ENGINE_ONLY.bat` to test the engine separately. Keep working in this Studio at `http://127.0.0.1:7872`."
+                )
 
             with gr.Accordion("Full reasoning", open=False):
                 agent_plan = gr.Markdown(label="Agent plan")
@@ -171,9 +163,9 @@ def build_app():
                 "3. Use **Studio Control Center** first.\n"
                 "4. Click **Build My Fooocus Plan**.\n"
                 "5. Use copy buttons on every output box.\n"
-                "6. Open **Hidden Fooocus engine** only when ready.\n"
-                "7. Paste, generate one image, review, then continue.\n\n"
-                "This is still a safe manual handoff. The hidden engine panel is not called automatically."
+                "6. Download the prompt pack.\n"
+                "7. Test the Fooocus engine separately only when needed with `RUN_FOOOCUS_ENGINE_ONLY.bat`.\n\n"
+                "This keeps the Studio stable while the local engine issue is isolated."
             )
 
     return demo
