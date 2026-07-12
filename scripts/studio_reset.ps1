@@ -9,6 +9,7 @@ Set-Location $Root
 
 $env:GRADIO_ANALYTICS_ENABLED = "False"
 $env:GRADIO_VERSION_CHECK = "False"
+$env:PYTHONUNBUFFERED = "1"
 
 $LogDir = Join-Path $Root "logs\studio"
 if (-not (Test-Path $LogDir)) {
@@ -165,7 +166,7 @@ function Start-FooocusEngine {
         New-Item -ItemType Directory -Path "$env:TEMP\fooocus" | Out-Null
     }
 
-    Start-LoggedWindow "Fooocus Engine" "$PythonCmd scripts\run_fooocus_keepalive.py --disable-analytics --disable-in-browser" "fooocus-engine"
+    Start-LoggedWindow "Fooocus Engine" "$PythonCmd -u scripts\run_fooocus_keepalive.py --disable-analytics --disable-in-browser" "fooocus-engine"
     Write-Host "Starting Fooocus engine on http://127.0.0.1:7865"
 }
 
@@ -175,7 +176,7 @@ function Start-AIStudio {
         return
     }
 
-    Start-LoggedWindow "AI Studio" "$PythonCmd ai_studio_app.py" "ai-studio"
+    Start-LoggedWindow "AI Studio" "$PythonCmd -u scripts\run_ai_studio_app.py" "ai-studio"
     Write-Host "Starting AI Studio on http://127.0.0.1:7872"
 }
 
