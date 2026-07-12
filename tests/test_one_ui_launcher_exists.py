@@ -43,15 +43,26 @@ def test_reset_helper_supports_logs_and_port_restart_modes() -> None:
     assert "Stop-PortProcess 7865" in content
 
 
-def test_reset_helper_waits_for_ports_before_opening_browser() -> None:
+def test_reset_helper_waits_for_ports_and_opens_studio_when_ready() -> None:
     content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
 
     assert "function Wait-PortReady" in content
-    assert 'Wait-PortReady "Fooocus Engine" 7865 180 $EngineLog' in content
-    assert 'Wait-PortReady "AI Studio" 7872 90 $StudioLog' in content
-    assert "did not become ready" in content
-    assert "Show-LogTail" in content
+    assert "function Open-StudioWhenReady" in content
+    assert "function Start-StudioAndEngine" in content
+    assert 'Wait-PortReady "AI Studio" 7872 $TimeoutSeconds $StudioLog 15' in content
+    assert 'Wait-PortReady "Fooocus Engine" 7865 300 $EngineLog 20' in content
     assert "Start-Process \"http://127.0.0.1:7872\"" in content
+    assert "Both AI Studio and Fooocus Engine are ready" in content
+
+
+def test_reset_helper_prints_live_log_clues_while_waiting() -> None:
+    content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
+
+    assert "Test-LogHasFailureClue" in content
+    assert "Recent $Name startup log clue" in content
+    assert "Traceback|ModuleNotFoundError|ImportError|RuntimeError|ERROR:|Exception" in content
+    assert "Show-LogTail $Name $LogPath 100" in content
+    assert "Try option 4 Cold reset" in content
 
 
 def test_reset_helper_uses_powershell_safe_variable_colon_syntax() -> None:
