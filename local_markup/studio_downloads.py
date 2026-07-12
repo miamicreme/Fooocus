@@ -46,6 +46,39 @@ def build_prompt_pack_text(
     )
 
 
+def build_engine_handoff_text(
+    workflow: str,
+    fooocus_area: str,
+    prompt: str,
+    negative_prompt: str,
+    setup_steps: str,
+    next_shots: str,
+) -> str:
+    if not any([workflow, fooocus_area, prompt, negative_prompt, setup_steps, next_shots]):
+        return "Build your Fooocus plan first, then click Send to Engine."
+
+    return "\n\n".join(
+        [
+            "Send to Engine Handoff",
+            (
+                "Browser safety note: AI Studio cannot directly auto-fill the embedded Fooocus "
+                "engine fields because the engine runs on a different local port. This prepares "
+                "the exact fields on the same page so you can paste them into the hidden engine safely."
+            ),
+            f"1. Open Fooocus area: {fooocus_area or 'Use the selected Fooocus area from the plan.'}",
+            f"2. Workflow: {workflow or 'Use the selected workflow from the plan.'}",
+            "3. Prompt:",
+            prompt or "Build the plan first to generate a prompt.",
+            "4. Negative Prompt:",
+            negative_prompt or "Build the plan first to generate a negative prompt.",
+            "5. Setup Steps:",
+            setup_steps or "Follow the Studio setup steps after building the plan.",
+            "6. Next Shot Prompts:",
+            next_shots or "Generate one first image, review it, then continue.",
+        ]
+    )
+
+
 def write_prompt_pack(
     workflow: str,
     fooocus_area: str,
