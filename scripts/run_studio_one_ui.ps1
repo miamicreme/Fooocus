@@ -21,9 +21,11 @@ New-Item -ItemType Directory -Force -Path $TempFooocus | Out-Null
 
 $LogDir = Join-Path $RepoRoot "logs\studio"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-$EngineLog = Join-Path $LogDir "latest-fooocus-engine.log"
-$StudioLog = Join-Path $LogDir "latest-ai-studio.log"
-Remove-Item $EngineLog, $StudioLog -Force -ErrorAction SilentlyContinue
+$EngineOutLog = Join-Path $LogDir "latest-fooocus-engine.out.log"
+$EngineErrLog = Join-Path $LogDir "latest-fooocus-engine.err.log"
+$StudioOutLog = Join-Path $LogDir "latest-ai-studio.out.log"
+$StudioErrLog = Join-Path $LogDir "latest-ai-studio.err.log"
+Remove-Item $EngineOutLog, $EngineErrLog, $StudioOutLog, $StudioErrLog -Force -ErrorAction SilentlyContinue
 
 function Test-PortOpen {
     param([string]$HostName, [int]$Port)
@@ -42,6 +44,14 @@ function Test-PortOpen {
     catch {
         return $false
     }
+}
+
+function Show-RecentLog {
+    param([string]$Label, [string]$OutLog, [string]$ErrLog)
+    Write-Host "Recent $Label stdout log: $OutLog"
+    if (Test-Path $OutLog) { Get-Content $OutLog -Tail 60 }
+    Write-Host "Recent $Label stderr log: $ErrLog"
+    if (Test-Path $ErrLog) { Get-Content $ErrLog -Tail 60 }
 }
 
 function Wait-PortOpen {
@@ -66,7 +76,7 @@ Write-Host "Engine wait: ${EngineWaitSeconds}s. Initial engine delay: ${InitialE
 
 if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7865)) {
     Write-Host "Starting Fooocus engine on http://127.0.0.1:7865"
-    Start-Process -FilePath $PythonCmd -ArgumentList @("scripts\run_fooocus_keepalive.py", "--disable-analytics", "--disable-in-browser") -WorkingDirectory $RepoRoot -RedirectStandardOutput $EngineLog -RedirectStandardError $EngineLog -WindowStyle Minimized
+    Start-Process -FilePath $PythonCmd -ArgumentList @("scripts\run_fooocus_keepalive.py", "--disable-analytics", "--disable-in-browser") -WorkingDirectory $RepoRoot -RedirectStandardOutput $EngineOutLog -RedirectStandardError $EngineErrLog -WindowStyle Minimized
     Write-Host "Waiting initial ${InitialEngineDelaySeconds}s for model/UI warmup before checking engine port..."
     Start-Sleep -Seconds $InitialEngineDelaySeconds
 }
@@ -76,14 +86,13 @@ else {
 
 $engineReady = Wait-PortOpen -Name "Fooocus Engine" -HostName "127.0.0.1" -Port 7865 -TimeoutSeconds $EngineWaitSeconds
 if (-not $engineReady) {
-    Write-Host "Recent Fooocus engine log: $EngineLog"
-    if (Test-Path $EngineLog) { Get-Content $EngineLog -Tail 80 }
+    Show-RecentLog -Label "Fooocus engine" -OutLog $EngineOutLog -ErrLog $EngineErrLog
     Write-Host "Studio will still start, but the hidden engine panel may not work until Fooocus finishes or the log error is fixed."
 }
 
 if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7872)) {
     Write-Host "Starting AI Studio on http://127.0.0.1:7872"
-    Start-Process -FilePath $PythonCmd -ArgumentList @("ai_studio_app.py") -WorkingDirectory $RepoRoot -RedirectStandardOutput $StudioLog -RedirectStandardError $StudioLog -WindowStyle Minimized
+    Start-Process -FilePath $PythonCmd -ArgumentList @("ai_studio_app.py") -WorkingDirectory $RepoRoot -RedirectStandardOutput $StudioOutLog -RedirectStandardError $StudioErrLog -WindowStyle Minimized
 }
 else {
     Write-Host "AI Studio is already running on http://127.0.0.1:7872"
@@ -95,13 +104,14 @@ if ($studioReady) {
     Start-Process "http://127.0.0.1:7872"
 }
 else {
-    Write-Host "AI Studio did not become ready. Recent log: $StudioLog"
-    if (Test-Path $StudioLog) { Get-Content $StudioLog -Tail 80 }
+    Show-RecentLog -Label "AI Studio" -OutLog $StudioOutLog -ErrLog $StudioErrLog
 }
 
 Write-Host ""
 Write-Host "Main UI: http://127.0.0.1:7872"
 Write-Host "Hidden engine: http://127.0.0.1:7865"
-Write-Host "Engine log: $EngineLog"
-Write-Host "Studio log: $StudioLog"
+Write-Host "Engine stdout log: $EngineOutLog"
+Write-Host "Engine stderr log: $EngineErrLog"
+Write-Host "Studio stdout log: $StudioOutLog"
+Write-Host "Studio stderr log: $StudioErrLog"
 Write-Host "Keep this launcher window open while working."
