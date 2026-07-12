@@ -95,6 +95,26 @@ def studio_engine_bridge_script():
 """
 
 
+def send_to_engine_js():
+    return f"""
+(workflow, fooocus_area, prompt, negative_prompt, setup_steps, next_shots) => {{
+    const iframe = document.getElementById("fooocus_engine_iframe");
+    if (iframe && iframe.contentWindow) {{
+        iframe.contentWindow.postMessage({{
+            type: "fooocus-studio-autofill",
+            workflow: workflow || "",
+            fooocus_area: fooocus_area || "",
+            prompt: prompt || "",
+            negative_prompt: negative_prompt || "",
+            setup_steps: setup_steps || "",
+            next_shots: next_shots || ""
+        }}, new URL("{FOOOCUS_ENGINE_URL}").origin);
+    }}
+    return [workflow, fooocus_area, prompt, negative_prompt, setup_steps, next_shots];
+}}
+"""
+
+
 def build_app():
     with gr.Blocks(title="AI Image Studio", css=CONTROL_UI_CSS) as demo:
         gr.HTML(value=studio_hero_markdown())
@@ -187,6 +207,7 @@ def build_app():
                 inputs=[selected_tool, selected_area, primary_prompt, negative_prompt, handoff_recipe, shot_prompts],
                 outputs=engine_handoff,
                 queue=False,
+                _js=send_to_engine_js(),
             )
             download_prompt_pack_btn.click(
                 write_prompt_pack,
