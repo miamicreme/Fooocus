@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from local_markup.studio_downloads import (
+    build_engine_handoff_text,
     build_history_text,
     build_prompt_pack_text,
     history_gallery_markdown,
@@ -27,6 +28,30 @@ def test_build_prompt_pack_text_contains_copy_ready_sections() -> None:
     assert "Prompt:" in text
     assert "Negative Prompt:" in text
     assert "Setup Steps:" in text
+
+
+def test_build_engine_handoff_text_prepares_safe_same_page_fields() -> None:
+    text = build_engine_handoff_text(
+        workflow="Image Prompt",
+        fooocus_area="Image Prompt tab",
+        prompt="clean portrait",
+        negative_prompt="blur",
+        setup_steps="upload face reference",
+        next_shots="Shot 2",
+    )
+
+    assert "Send to Engine Handoff" in text
+    assert "Browser safety note" in text
+    assert "auto-fill" in text
+    assert "Image Prompt tab" in text
+    assert "clean portrait" in text
+    assert "blur" in text
+
+
+def test_build_engine_handoff_text_guides_user_to_build_plan_first() -> None:
+    text = build_engine_handoff_text("", "", "", "", "", "")
+
+    assert "Build your Fooocus plan first" in text
 
 
 def test_write_prompt_pack_creates_download_file() -> None:
