@@ -43,6 +43,17 @@ def test_reset_helper_supports_logs_and_port_restart_modes() -> None:
     assert "Stop-PortProcess 7865" in content
 
 
+def test_reset_helper_waits_for_ports_before_opening_browser() -> None:
+    content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
+
+    assert "function Wait-PortReady" in content
+    assert 'Wait-PortReady "Fooocus Engine" 7865 180 $EngineLog' in content
+    assert 'Wait-PortReady "AI Studio" 7872 90 $StudioLog' in content
+    assert "did not become ready" in content
+    assert "Show-LogTail" in content
+    assert "Start-Process \"http://127.0.0.1:7872\"" in content
+
+
 def test_reset_helper_uses_powershell_safe_variable_colon_syntax() -> None:
     content = Path("scripts/studio_reset.ps1").read_text(encoding="utf-8")
 

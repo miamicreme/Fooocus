@@ -15,6 +15,9 @@ if (-not (Test-Path $LogDir)) {
     New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 }
 
+$StudioLog = Join-Path $LogDir "latest-ai-studio.log"
+$EngineLog = Join-Path $LogDir "latest-fooocus-engine.log"
+
 $PythonCmd = "python"
 if (Test-Path ".venv\Scripts\python.exe") {
     $PythonCmd = ".venv\Scripts\python.exe"
@@ -24,6 +27,54 @@ function Test-PortListening {
     param([int]$Port)
     $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     return $null -ne $conn
+}
+
+function Show-LogTail {
+    param(
+        [string]$Name,
+        [string]$LogPath
+    )
+
+    if (-not (Test-Path $LogPath)) {
+        Write-Warning "$Name log does not exist yet: $LogPath"
+        return
+    }
+
+    Write-Host ""
+    Write-Host "Last lines from $Name log: $LogPath"
+    Write-Host "------------------------------------------------------------"
+    Get-Content -Path $LogPath -Tail 80 -ErrorAction SilentlyContinue
+    Write-Host "------------------------------------------------------------"
+}
+
+function Wait-PortReady {
+    param(
+        [string]$Name,
+        [int]$Port,
+        [int]$TimeoutSeconds,
+        [string]$LogPath
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastNotice = Get-Date
+
+    while ((Get-Date) -lt $deadline) {
+        if (Test-PortListening $Port) {
+            Write-Host "$Name is ready on http://127.0.0.1:$Port"
+            return $true
+        }
+
+        if (((Get-Date) - $lastNotice).TotalSeconds -ge 5) {
+            Write-Host "Waiting for $Name on port ${Port}..."
+            $lastNotice = Get-Date
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    Write-Warning "$Name did not become ready on port ${Port} within $TimeoutSeconds seconds."
+    Show-LogTail $Name $LogPath
+    return $false
 }
 
 function Stop-PortProcess {
@@ -92,8 +143,9 @@ switch ($Mode) {
         Stop-PortProcess 7872
         Start-Sleep -Seconds 2
         Start-AIStudio
-        Start-Sleep -Seconds 2
-        Start-Process "http://127.0.0.1:7872"
+        if (Wait-PortReady "AI Studio" 7872 90 $StudioLog) {
+            Start-Process "http://127.0.0.1:7872"
+        }
     }
     "cold" {
         Write-Host "Cold reset: stopping Studio and Fooocus, clearing temp session folder, then starting clean."
@@ -103,18 +155,22 @@ switch ($Mode) {
         New-Item -ItemType Directory -Path "$env:TEMP\fooocus" -ErrorAction SilentlyContinue | Out-Null
         Start-Sleep -Seconds 2
         Start-FooocusEngine
-        Start-Sleep -Seconds 12
+        $engineReady = Wait-PortReady "Fooocus Engine" 7865 180 $EngineLog
         Start-AIStudio
-        Start-Sleep -Seconds 2
-        Start-Process "http://127.0.0.1:7872"
+        $studioReady = Wait-PortReady "AI Studio" 7872 90 $StudioLog
+        if ($engineReady -and $studioReady) {
+            Start-Process "http://127.0.0.1:7872"
+        }
     }
     default {
         Write-Host "Start/Open: starting missing services and opening AI Studio."
         Start-FooocusEngine
-        Start-Sleep -Seconds 12
+        $engineReady = Wait-PortReady "Fooocus Engine" 7865 180 $EngineLog
         Start-AIStudio
-        Start-Sleep -Seconds 2
-        Start-Process "http://127.0.0.1:7872"
+        $studioReady = Wait-PortReady "AI Studio" 7872 90 $StudioLog
+        if ($engineReady -and $studioReady) {
+            Start-Process "http://127.0.0.1:7872"
+        }
     }
 }
 
