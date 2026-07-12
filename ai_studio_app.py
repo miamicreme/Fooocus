@@ -37,15 +37,88 @@ def feature_catalog_markdown():
 
 def fooocus_iframe_html():
     return (
-        f'<iframe src="{FOOOCUS_ENGINE_URL}" '
+        f'<iframe id="fooocus_engine_iframe" src="{FOOOCUS_ENGINE_URL}" '
         'style="width:100%; height:78vh; border:1px solid #333; border-radius:12px;" '
         'title="Fooocus Engine"></iframe>'
     )
 
 
+def studio_engine_bridge_script():
+    return f"""
+<script>
+(function() {{
+    if (window.__fooocusStudioEngineBridgeInstalled) {{
+        return;
+    }}
+    window.__fooocusStudioEngineBridgeInstalled = true;
+
+    const ENGINE_ORIGIN = new URL("{FOOOCUS_ENGINE_URL}").origin;
+
+    function readTextbox(elemId) {{
+        const root = document.getElementById(elemId);
+        if (!root) {{
+            return "";
+        }}
+        const field = root.querySelector("textarea") || root.querySelector("input");
+        return field ? field.value : "";
+    }}
+
+    function sendStudioPlanToEngine() {{
+        const iframe = document.getElementById("fooocus_engine_iframe");
+        if (!iframe || !iframe.contentWindow) {{
+            return false;
+        }}
+
+        iframe.contentWindow.postMessage({{
+            type: "fooocus-studio-autofill",
+            workflow: readTextbox("studio_selected_tool"),
+            fooocus_area: readTextbox("studio_selected_area"),
+            prompt: readTextbox("studio_primary_prompt"),
+            negative_prompt: readTextbox("studio_negative_prompt"),
+            setup_steps: readTextbox("studio_handoff_recipe"),
+            next_shots: readTextbox("studio_shot_prompts")
+        }}, ENGINE_ORIGIN);
+
+        return true;
+    }}
+
+    window.fooocusStudioSendToEngine = sendStudioPlanToEngine;
+
+    document.addEventListener("click", function(event) {{
+        if (!event.target.closest("#studio_send_to_engine_button")) {{
+            return;
+        }}
+        setTimeout(sendStudioPlanToEngine, 250);
+    }}, true);
+}})();
+</script>
+"""
+
+
+def send_to_engine_js():
+    return f"""
+(workflow, fooocus_area, prompt, negative_prompt, setup_steps, next_shots) => {{
+    const iframe = document.getElementById("fooocus_engine_iframe");
+    if (iframe && iframe.contentWindow) {{
+        iframe.contentWindow.postMessage({{
+            type: "fooocus-studio-autofill",
+            workflow: workflow || "",
+            fooocus_area: fooocus_area || "",
+            prompt: prompt || "",
+            negative_prompt: negative_prompt || "",
+            setup_steps: setup_steps || "",
+            next_shots: next_shots || ""
+        }}, new URL("{FOOOCUS_ENGINE_URL}").origin);
+    }}
+    return [workflow, fooocus_area, prompt, negative_prompt, setup_steps, next_shots];
+}}
+"""
+
+
 def build_app():
     with gr.Blocks(title="AI Image Studio", css=CONTROL_UI_CSS) as demo:
         gr.HTML(value=studio_hero_markdown())
+        gr.HTML(value=studio_engine_bridge_script())
 
         with gr.Tab("Studio Control Center"):
             with gr.Row():
@@ -76,16 +149,16 @@ def build_app():
 
             gr.Markdown(value=copy_controls_summary())
             with gr.Row():
-                selected_tool = copyable_textbox(label="Use this Fooocus workflow", interactive=False)
-                selected_area = copyable_textbox(label="Open this Fooocus tab or area", interactive=False)
+                selected_tool = copyable_textbox(label="Use this Fooocus workflow", interactive=False, elem_id="studio_selected_tool")
+                selected_area = copyable_textbox(label="Open this Fooocus tab or area", interactive=False, elem_id="studio_selected_area")
 
             with gr.Row():
-                primary_prompt = copyable_textbox(label="Step 1: Copy this prompt", lines=7)
-                negative_prompt = copyable_textbox(label="Step 2: Copy this negative prompt", lines=7)
+                primary_prompt = copyable_textbox(label="Step 1: Prompt sent to engine", lines=7, elem_id="studio_primary_prompt")
+                negative_prompt = copyable_textbox(label="Step 2: Negative prompt sent to engine", lines=7, elem_id="studio_negative_prompt")
 
             with gr.Row():
-                handoff_recipe = copyable_textbox(label="Step 3: Follow these Fooocus setup steps", lines=10)
-                shot_prompts = copyable_textbox(label="Use these only after the first result", lines=10)
+                handoff_recipe = copyable_textbox(label="Step 3: Setup steps", lines=10, elem_id="studio_handoff_recipe")
+                shot_prompts = copyable_textbox(label="Use these only after the first result", lines=10, elem_id="studio_shot_prompts")
 
             with gr.Accordion("Review before generating", open=True):
                 adapter_preview = gr.Markdown(label="Adapter preview")
@@ -93,11 +166,12 @@ def build_app():
 
             with gr.Accordion("Send to Engine", open=True):
                 gr.Markdown(
-                    "Click **Send to Engine** after building the plan. Browser safety blocks direct auto-fill "
-                    "into the embedded Fooocus iframe, so this prepares copy-ready engine fields on this same page."
+                    "Click **Send to Engine** after building the plan. This sends the prompt and negative prompt "
+                    "to the embedded Fooocus engine automatically through a browser `postMessage` bridge. "
+                    "No cut-and-paste is needed for those fields."
                 )
-                send_to_engine_btn = gr.Button("Send to Engine", variant="primary")
-                engine_handoff = copyable_textbox(label="Engine-ready fields to paste into Fooocus", lines=14, interactive=False)
+                send_to_engine_btn = gr.Button("Send to Engine", variant="primary", elem_id="studio_send_to_engine_button")
+                engine_handoff = copyable_textbox(label="Engine send status", lines=10, interactive=False)
 
             with gr.Row():
                 download_prompt_pack_btn = gr.Button("Download Prompt Pack", variant="secondary")
@@ -133,6 +207,7 @@ def build_app():
                 inputs=[selected_tool, selected_area, primary_prompt, negative_prompt, handoff_recipe, shot_prompts],
                 outputs=engine_handoff,
                 queue=False,
+                _js=send_to_engine_js(),
             )
             download_prompt_pack_btn.click(
                 write_prompt_pack,
@@ -184,11 +259,11 @@ def build_app():
                 "2. Work from `http://127.0.0.1:7872`.\n"
                 "3. Use **Studio Control Center** first.\n"
                 "4. Click **Build My Fooocus Plan**.\n"
-                "5. Click **Send to Engine** to prepare engine-ready fields.\n"
-                "6. Use copy buttons on every output box.\n"
-                "7. Open **Hidden Fooocus engine** only when ready.\n"
-                "8. Paste, generate one image, review, then continue.\n\n"
-                "This is still a safe manual handoff. The hidden engine panel is not called automatically."
+                "5. Click **Send to Engine** to auto-fill the hidden Fooocus prompt fields.\n"
+                "6. Open **Hidden Fooocus engine** and confirm the fields are filled.\n"
+                "7. Click **Generate** inside Fooocus.\n"
+                "8. Review one image, then continue.\n\n"
+                "This is a safe one-page bridge. Studio sends field values to the embedded engine; it does not auto-click Generate."
             )
 
     return demo
