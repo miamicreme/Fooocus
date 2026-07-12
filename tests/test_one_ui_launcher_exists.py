@@ -98,6 +98,16 @@ def test_studio_launcher_uses_stable_fooocus_engine_profile() -> None:
     assert "Using stable Fooocus engine profile" in content
 
 
+def test_launch_prevents_webui_import_from_double_running_launcher() -> None:
+    launch_content = Path("launch.py").read_text(encoding="utf-8")
+    webui_content = Path("webui.py").read_text(encoding="utf-8")
+
+    assert "import launch" in webui_content
+    assert 'if __name__ == "__main__"' in launch_content
+    assert 'sys.modules.setdefault("launch", sys.modules[__name__])' in launch_content
+    assert "duplicating\n# startup/model initialization" in launch_content
+
+
 def test_fooocus_engine_watchdog_restarts_native_crashes() -> None:
     content = Path("scripts/run_fooocus_engine_watchdog.py").read_text(encoding="utf-8")
 
