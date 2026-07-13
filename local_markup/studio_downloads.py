@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import gettempdir
-from time import time
+from time import time_ns
 
 from local_markup.studio_history import StudioHistoryStore
 
@@ -10,18 +10,15 @@ from local_markup.studio_history import StudioHistoryStore
 DOWNLOAD_DIR = Path(gettempdir()) / "fooocus_ai_studio_downloads"
 
 
-
 def ensure_download_dir() -> Path:
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     return DOWNLOAD_DIR
 
 
-
 def safe_download_name(prefix: str, extension: str = "txt") -> str:
-    timestamp = int(time())
+    unique_stamp = time_ns()
     cleaned_prefix = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in prefix).strip("_") or "studio"
-    return f"{cleaned_prefix}_{timestamp}.{extension}"
-
+    return f"{cleaned_prefix}_{unique_stamp}.{extension}"
 
 
 def build_prompt_pack_text(
@@ -49,7 +46,6 @@ def build_prompt_pack_text(
     )
 
 
-
 def write_prompt_pack(
     workflow: str,
     fooocus_area: str,
@@ -66,17 +62,14 @@ def write_prompt_pack(
     return str(path)
 
 
-
 def build_history_text(history_markdown: str) -> str:
     return "Fooocus AI Studio History\n\n" + (history_markdown or "No session history recorded yet.")
-
 
 
 def write_history_download(history_markdown: str) -> str:
     path = ensure_download_dir() / safe_download_name("fooocus_history")
     path.write_text(build_history_text(history_markdown), encoding="utf-8")
     return str(path)
-
 
 
 def write_result_manifest(output_paths: list[str], status_message: str = "") -> str:
@@ -87,7 +80,6 @@ def write_result_manifest(output_paths: list[str], status_message: str = "") -> 
     return str(path)
 
 
-
 def latest_downloadable_result(output_paths: list[str]) -> str | None:
     for output_path in reversed(output_paths):
         if output_path and Path(output_path).exists():
@@ -95,11 +87,9 @@ def latest_downloadable_result(output_paths: list[str]) -> str | None:
     return None
 
 
-
 def history_gallery_markdown(store: StudioHistoryStore) -> str:
     if not store.items:
         return "## History Gallery\n\nNo generated images are recorded yet. After live generation, saved images will appear here with download buttons."
-
     rows = ["## History Gallery", "", "| Item | Workflow | Images | Rating |", "|---|---|---|---|"]
     for item in store.latest(limit=12):
         output_paths = item.image_paths or ([item.image_path] if item.image_path else [])
