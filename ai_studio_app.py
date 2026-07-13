@@ -79,7 +79,7 @@ def build_app():
                     image_3 = gr.Image(label="Reference 3: optional pose, layout, or extra angle", type="filepath")
 
             gr.Markdown(value=copy_controls_summary())
-            gr.Markdown("Copy controls are fallback/debugging tools. Normal generation stays entirely inside Studio.")
+            gr.Markdown("Copy buttons are fallback/debugging tools. Normal generation stays entirely inside Studio.")
             with gr.Row():
                 selected_tool = copyable_textbox(label="Selected Studio workflow", interactive=False)
                 selected_area = copyable_textbox(label="Fooocus engine area", interactive=False)
