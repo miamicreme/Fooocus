@@ -72,14 +72,58 @@ function Wait-PortOpen {
     return $false
 }
 
+function Watch-Studio {
+    param(
+        [System.Diagnostics.Process]$StudioProcess,
+        [System.Diagnostics.Process]$EngineProcess
+    )
+
+    Write-Host ""
+    Write-Host "Keep this launcher window open while working. Press Ctrl+C here to stop watching."
+    Write-Host ""
+
+    $engineExitReported = $false
+    try {
+        while ($true) {
+            if ($StudioProcess -and $StudioProcess.HasExited) {
+                Write-Host "AI Studio process exited with code $($StudioProcess.ExitCode)."
+                Show-RecentLog -Label "AI Studio" -OutLog $StudioOutLog -ErrLog $StudioErrLog
+                break
+            }
+
+            if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7872)) {
+                Write-Host "AI Studio is no longer reachable on http://127.0.0.1:7872."
+                Show-RecentLog -Label "AI Studio" -OutLog $StudioOutLog -ErrLog $StudioErrLog
+                break
+            }
+
+            if ($EngineProcess -and $EngineProcess.HasExited -and -not $engineExitReported) {
+                $engineExitReported = $true
+                Write-Host "Optional Fooocus engine process exited with code $($EngineProcess.ExitCode). Studio will keep running."
+                Show-RecentLog -Label "Fooocus engine" -OutLog $EngineOutLog -ErrLog $EngineErrLog
+            }
+
+            Start-Sleep -Seconds 5
+        }
+    }
+    catch [System.Management.Automation.PipelineStoppedException] {
+        throw
+    }
+    catch {
+        Write-Host "Launcher watch stopped: $($_.Exception.Message)"
+        throw
+    }
+}
+
 Write-Host "Starting AI Studio Control Center."
 Write-Host "Using Python: $PythonCmd"
 Write-Host "Engine auto-start: $StartEngine"
 
+$EngineProcess = $null
 if ($StartEngine) {
     if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7865)) {
         Write-Host "Starting optional Fooocus engine on http://127.0.0.1:7865"
-        Start-Process -FilePath $PythonCmd -ArgumentList @("scripts\run_fooocus_keepalive.py", "--disable-analytics", "--disable-in-browser") -WorkingDirectory $RepoRoot -RedirectStandardOutput $EngineOutLog -RedirectStandardError $EngineErrLog -WindowStyle Minimized
+        $EngineProcess = Start-Process -FilePath $PythonCmd -ArgumentList @("launch.py", "--disable-analytics", "--disable-in-browser") -WorkingDirectory $RepoRoot -RedirectStandardOutput $EngineOutLog -RedirectStandardError $EngineErrLog -WindowStyle Minimized -PassThru
         Write-Host "Waiting initial ${InitialEngineDelaySeconds}s for model/UI warmup before checking engine port..."
         Start-Sleep -Seconds $InitialEngineDelaySeconds
     }
@@ -90,7 +134,7 @@ if ($StartEngine) {
     $engineReady = Wait-PortOpen -Name "Fooocus Engine" -HostName "127.0.0.1" -Port 7865 -TimeoutSeconds $EngineWaitSeconds
     if (-not $engineReady) {
         Show-RecentLog -Label "Fooocus engine" -OutLog $EngineOutLog -ErrLog $EngineErrLog
-        Write-Host "Continuing with Studio only. The hidden engine panel will stay unavailable until Fooocus is fixed."
+        Write-Host "Continuing with Studio only. The engine URL will stay unavailable until Fooocus is started manually."
     }
 }
 else {
@@ -99,9 +143,10 @@ else {
 }
 
 $startedStudio = $false
+$StudioProcess = $null
 if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7872)) {
     Write-Host "Starting AI Studio on http://127.0.0.1:7872"
-    Start-Process -FilePath $PythonCmd -ArgumentList @("ai_studio_app.py") -WorkingDirectory $RepoRoot -RedirectStandardOutput $StudioOutLog -RedirectStandardError $StudioErrLog -WindowStyle Minimized
+    $StudioProcess = Start-Process -FilePath $PythonCmd -ArgumentList @("ai_studio_app.py") -WorkingDirectory $RepoRoot -RedirectStandardOutput $StudioOutLog -RedirectStandardError $StudioErrLog -WindowStyle Minimized -PassThru
     $startedStudio = $true
 }
 else {
@@ -120,13 +165,15 @@ if ($studioReady) {
 }
 else {
     Show-RecentLog -Label "AI Studio" -OutLog $StudioOutLog -ErrLog $StudioErrLog
+    exit 1
 }
 
 Write-Host ""
 Write-Host "Main UI: http://127.0.0.1:7872"
-Write-Host "Optional hidden engine: http://127.0.0.1:7865"
+Write-Host "Optional engine URL: http://127.0.0.1:7865"
 Write-Host "Engine stdout log: $EngineOutLog"
 Write-Host "Engine stderr log: $EngineErrLog"
 Write-Host "Studio stdout log: $StudioOutLog"
 Write-Host "Studio stderr log: $StudioErrLog"
-Write-Host "Keep this launcher window open while working."
+
+Watch-Studio -StudioProcess $StudioProcess -EngineProcess $EngineProcess
