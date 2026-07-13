@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional
 
 from local_markup.ai_studio_agent_v2 import AgentPlan, build_agent_plan
 from local_markup.engine_hardware_profiles import HardwareProfile, profile_summary, select_hardware_profile
 from local_markup.engine_queue_contract import EngineJobKind
-from local_markup.local_fooocus_adapter import LocalDryRunFooocusAdapter
+from local_markup.local_fooocus_adapter import LocalDryRunFooocusAdapter, LocalFooocusAdapter
 from local_markup.studio_adapter_contract import AdapterResult, ImageStudioJob, ReferenceImage
 from local_markup.studio_adapter_mappings import build_face_reference_job, build_image_prompt_job, build_inpaint_job
+from local_markup.studio_downloads import latest_downloadable_result, write_result_manifest
 from local_markup.studio_generation_history import add_adapter_result_to_history
-from local_markup.studio_history import StudioHistoryStore
+from local_markup.studio_history import StudioHistoryStore, load_history, save_history
 
 
 REFERENCE_PREFIX = "studio_reference"
@@ -41,22 +43,42 @@ class StudioWorkflowRun:
         notes = "\n".join([f"- {note}" for note in self.mapping_notes])
         return (
             "## Ready for Fooocus\n\n"
-            "This is a safe preview. Nothing was generated yet.\n\n"
+            "This preview describes the job Studio will submit when you click **Generate in Studio**.\n\n"
             f"**Workflow:** {self.plan.tool}\n\n"
             f"**Fooocus area:** {self.plan.fooocus_tab}\n\n"
             f"**Hardware recommendation:** {profile_summary(self.hardware_profile)}\n\n"
-            f"### References to upload\n{chr(10).join(reference_lines)}\n\n"
-            f"### Simple setup steps\n{handoff_steps}\n\n"
+            f"### References\n{chr(10).join(reference_lines)}\n\n"
+            f"### Manual fallback only\n{handoff_steps}\n\n"
             f"### Why this setup\n{notes or '- Standard text-to-image setup.'}"
         )
 
     def history_markdown(self) -> str:
         rows = []
         for item in self.history.latest(limit=5):
+            output_count = item.metadata.get("output_count", str(len(item.image_paths)))
             rows.append(
-                f"- `{item.workflow}` plan saved as `{item.item_id}` with {item.metadata.get('reference_count', '0')} reference(s). Status: {item.metadata.get('adapter_status', 'unknown')}."
+                f"- `{item.workflow}` job saved as `{item.item_id}` with {item.metadata.get('reference_count', '0')} reference(s), {output_count} output(s). Status: {item.metadata.get('adapter_status', 'unknown')}."
             )
         return "## Local Session History\n\n" + ("\n".join(rows) if rows else "No session history yet.")
+
+
+@dataclass(frozen=True)
+class StudioGenerationRun:
+    workflow_run: StudioWorkflowRun
+    result: AdapterResult
+    output_paths: List[str]
+    manifest_path: str
+
+    def status_markdown(self) -> str:
+        result = self.result
+        latest = result.latest_output_path or "No image returned yet."
+        return (
+            f"## Generation status: {result.status.value}\n\n"
+            f"**Current step:** {result.message}\n\n"
+            f"**Progress:** {result.progress_percent:.0f}%\n\n"
+            f"**Job ID:** `{result.job_id or 'none'}`\n\n"
+            f"**Last result:** `{latest}`"
+        )
 
 
 def reference_names_from_count(image_count: int) -> List[str]:
@@ -100,6 +122,7 @@ def build_job_from_plan(plan: AgentPlan, image_count: int) -> tuple[ImageStudioJ
             width=mapping.job.width,
             height=mapping.job.height,
             seed=mapping.job.seed,
+            settings={"performance": "Speed", "image_number": "1", "aspect_ratio": "1024x1024"},
             metadata=metadata,
         )
         return job, [note.note for note in mapping.notes]
@@ -117,10 +140,69 @@ def build_job_from_plan(plan: AgentPlan, image_count: int) -> tuple[ImageStudioJ
         negative_prompt=plan.negative_prompt,
         kind=kind_for_feature(feature_key),
         references=references,
+        settings={"performance": "Speed", "image_number": "1", "aspect_ratio": "1024x1024"},
         metadata={"fooocus_area": plan.fooocus_tab, "studio_feature": feature_key},
     )
     notes = [f"Use the `{feature_key}` Studio plan as a `{job.kind.value}` Fooocus job."]
     return job, notes
+
+
+def image_path_from_gradio_value(value) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("path", "name", "orig_name"):
+            maybe_path = value.get(key)
+            if isinstance(maybe_path, str):
+                return maybe_path
+    return None
+
+
+def references_from_uploaded_images(images: list[object]) -> list[ReferenceImage]:
+    references: list[ReferenceImage] = []
+    for index, image_value in enumerate(images, start=1):
+        path = image_path_from_gradio_value(image_value)
+        if not path:
+            continue
+        references.append(ReferenceImage(name=Path(path).name, path=path, role="reference" if index > 1 else "primary_reference"))
+    return references
+
+
+def job_with_actual_references(job: ImageStudioJob, uploaded_images: list[object]) -> ImageStudioJob:
+    references = references_from_uploaded_images(uploaded_images)
+    if not references:
+        return job
+    return ImageStudioJob(
+        goal=job.goal,
+        prompt=job.prompt,
+        negative_prompt=job.negative_prompt,
+        kind=job.kind,
+        references=references,
+        width=job.width,
+        height=job.height,
+        seed=job.seed,
+        settings=job.settings,
+        metadata=job.metadata,
+    )
+
+
+def job_with_prompt_overrides(job: ImageStudioJob, prompt_override: str, negative_prompt_override: str) -> ImageStudioJob:
+    prompt = (prompt_override or job.prompt).strip()
+    negative_prompt = (negative_prompt_override or job.negative_prompt).strip()
+    return ImageStudioJob(
+        goal=job.goal,
+        prompt=prompt,
+        negative_prompt=negative_prompt,
+        kind=job.kind,
+        references=job.references,
+        width=job.width,
+        height=job.height,
+        seed=job.seed,
+        settings=job.settings,
+        metadata=job.metadata,
+    )
 
 
 def run_studio_workflow(
@@ -147,6 +229,39 @@ def run_studio_workflow(
     )
 
 
+def submit_generation_run(
+    goal: str,
+    image_1,
+    image_2,
+    image_3,
+    wants_identity: bool,
+    wants_exact_edit: bool,
+    wants_bundle: bool,
+    vram_gb: int = 6,
+    prompt_override: str = "",
+    negative_prompt_override: str = "",
+) -> StudioGenerationRun:
+    uploaded_images = [image_1, image_2, image_3]
+    image_count = sum(image_path_from_gradio_value(item) is not None for item in uploaded_images)
+    history = load_history()
+    workflow_run = run_studio_workflow(goal, image_count, wants_identity, wants_exact_edit, wants_bundle, vram_gb=vram_gb, existing_history=history)
+    job = job_with_actual_references(workflow_run.job, uploaded_images)
+    job = job_with_prompt_overrides(job, prompt_override, negative_prompt_override)
+    result = LocalFooocusAdapter().submit(job)
+    updated_history = add_adapter_result_to_history(history, job, result, image_paths=result.output_paths)
+    save_history(updated_history)
+    workflow_run = StudioWorkflowRun(
+        plan=workflow_run.plan,
+        job=job,
+        adapter_result=result,
+        hardware_profile=workflow_run.hardware_profile,
+        history=updated_history,
+        mapping_notes=workflow_run.mapping_notes,
+    )
+    manifest_path = write_result_manifest(result.output_paths, result.message)
+    return StudioGenerationRun(workflow_run=workflow_run, result=result, output_paths=list(result.output_paths), manifest_path=manifest_path)
+
+
 def build_studio_workflow_outputs(
     goal: str,
     image_1,
@@ -171,3 +286,79 @@ def build_studio_workflow_outputs(
         run.adapter_markdown(),
         run.history_markdown(),
     )
+
+
+def submit_studio_generation(
+    goal: str,
+    image_1,
+    image_2,
+    image_3,
+    wants_identity: bool,
+    wants_exact_edit: bool,
+    wants_bundle: bool,
+    vram_gb: int,
+    prompt_override: str,
+    negative_prompt_override: str,
+) -> tuple[str, list[str], Optional[str], str, str, str]:
+    run = submit_generation_run(
+        goal=goal,
+        image_1=image_1,
+        image_2=image_2,
+        image_3=image_3,
+        wants_identity=wants_identity,
+        wants_exact_edit=wants_exact_edit,
+        wants_bundle=wants_bundle,
+        vram_gb=vram_gb,
+        prompt_override=prompt_override,
+        negative_prompt_override=negative_prompt_override,
+    )
+    downloadable = latest_downloadable_result(run.output_paths) or run.manifest_path
+    latest_path = run.result.latest_output_path or ""
+    return (
+        run.status_markdown(),
+        run.output_paths,
+        downloadable,
+        latest_path,
+        run.workflow_run.adapter_markdown(),
+        run.workflow_run.history_markdown(),
+    )
+
+
+def poll_generation_status(job_id: str) -> str:
+    if not job_id:
+        return "## Generation status\n\nNo active job selected."
+    result = LocalFooocusAdapter().get_status(job_id)
+    return f"## Generation status: {result.status.value}\n\n{result.message}"
+
+
+def load_generation_results() -> tuple[list[str], Optional[str], str, str]:
+    history = load_history()
+    outputs: list[str] = []
+    for item in history.latest(limit=20):
+        outputs.extend(item.image_paths or ([item.image_path] if item.image_path else []))
+    downloadable = latest_downloadable_result(outputs)
+    latest_path = outputs[0] if outputs else ""
+    return outputs, downloadable, latest_path, StudioWorkflowRun(
+        plan=build_agent_plan("history", 0, True, False, False),
+        job=ImageStudioJob(goal="history", prompt="", negative_prompt="", kind=EngineJobKind.TEXT_TO_IMAGE),
+        adapter_result=AdapterResult(status=LocalDryRunFooocusAdapter().submit(ImageStudioJob(goal="history", prompt="", negative_prompt="", kind=EngineJobKind.TEXT_TO_IMAGE)).status, message="History loaded."),
+        hardware_profile=select_hardware_profile(6),
+        history=history,
+        mapping_notes=[],
+    ).history_markdown()
+
+
+def stop_studio_generation() -> str:
+    return "## Stop requested\n\nStudio recorded the stop request. If Fooocus is actively processing, use the engine Stop button for hard cancellation until direct cancellation is exposed by the engine API."
+
+
+def use_latest_result_as_reference(latest_path: str) -> str:
+    if latest_path:
+        return f"Latest result ready to use as reference: `{latest_path}`"
+    return "Generate an image first, then use it as the next reference."
+
+
+def enhance_latest_result(latest_path: str) -> str:
+    if latest_path:
+        return f"Enhance queued conceptually for `{latest_path}`. The next pass will submit this path as an Enhance job."
+    return "Generate or select an image before using Enhance."
