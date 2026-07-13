@@ -15,6 +15,7 @@ STUDIO_JOB_DIR = Path("logs") / "studio" / "jobs"
 FOOOCUS_OUTPUT_DIR = Path("outputs")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 STUDIO_ENGINE_API_NAME = "/studio_generate"
+STUDIO_CANCEL_API_NAME = "/studio_cancel"
 
 
 @dataclass(frozen=True)
@@ -50,13 +51,11 @@ class LocalDryRunFooocusAdapter:
 
 
 class LocalFooocusAdapter:
-    """Local Studio-to-Fooocus adapter.
+    """Stable local Studio-to-Fooocus adapter.
 
-    Studio must not guess the raw Fooocus Gradio payload. The only supported
-    automatic path is a known Studio-facing engine endpoint, `/studio_generate`,
-    that accepts the normalized Studio job JSON and returns output paths. This
-    keeps the one-click Studio flow stable and prevents silent fallback to
-    browser-copy behavior.
+    Studio calls only the explicit `/studio_generate` and `/studio_cancel`
+    endpoints registered by the Fooocus launch hook. It never attempts to infer
+    the raw Fooocus Gradio control payload.
     """
 
     name = "local_fooocus"
@@ -70,6 +69,7 @@ class LocalFooocusAdapter:
         generate_callable: Optional[Callable[[dict[str, object]], Iterable[str] | str | None]] = None,
         client_factory: Optional[Callable[[str], Any]] = None,
         api_name: str = STUDIO_ENGINE_API_NAME,
+        cancel_api_name: str = STUDIO_CANCEL_API_NAME,
     ) -> None:
         self.engine_host = engine_host
         self.engine_port = engine_port
@@ -78,6 +78,7 @@ class LocalFooocusAdapter:
         self.generate_callable = generate_callable
         self.client_factory = client_factory
         self.api_name = api_name
+        self.cancel_api_name = cancel_api_name
         self._records: dict[str, EngineJobRecord] = {}
 
     @property
@@ -96,6 +97,7 @@ class LocalFooocusAdapter:
         payload["engine_url"] = self.engine_url
         payload["adapter"] = self.name
         payload["required_api"] = self.api_name
+        payload["cancel_api"] = self.cancel_api_name
         return payload
 
     def write_normalized_job(self, job: ImageStudioJob, job_id: str) -> Path:
@@ -141,7 +143,12 @@ class LocalFooocusAdapter:
                 message="Generation failed before submission. Engine status: unavailable. Reason: connection refused on local engine. Start Fooocus engine and retry.",
                 job_id=failed.job_id,
                 handoff_steps=notes,
-                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url, "required_api": self.api_name},
+                metadata={
+                    "normalized_job_path": str(job_path),
+                    "engine_url": self.engine_url,
+                    "required_api": self.api_name,
+                    "cancel_api": self.cancel_api_name,
+                },
             )
 
         running = transition_job(queued, EngineJobStatus.RUNNING)
@@ -152,9 +159,9 @@ class LocalFooocusAdapter:
             output_paths = self._submit_to_engine(job, running.job_id)
             if not output_paths:
                 output_paths = self.discover_recent_outputs(started_at)
-            completed = transition_job(running, EngineJobStatus.SUCCEEDED, outputs=output_paths)
-            self._records[completed.job_id] = completed
             if output_paths:
+                completed = transition_job(running, EngineJobStatus.SUCCEEDED, outputs=output_paths)
+                self._records[completed.job_id] = completed
                 return AdapterResult(
                     status=AdapterJobStatus.COMPLETED,
                     message=f"Generation completed. {len(output_paths)} output image(s) returned to Studio.",
@@ -162,17 +169,28 @@ class LocalFooocusAdapter:
                     handoff_steps=notes,
                     output_paths=output_paths,
                     progress_percent=100.0,
-                    metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url, "required_api": self.api_name},
+                    metadata={
+                        "normalized_job_path": str(job_path),
+                        "engine_url": self.engine_url,
+                        "required_api": self.api_name,
+                        "cancel_api": self.cancel_api_name,
+                    },
                 )
+            failed = transition_job(running, EngineJobStatus.FAILED, error="No output image was returned by Studio endpoint.")
+            self._records[failed.job_id] = failed
             return AdapterResult(
                 status=AdapterJobStatus.FAILED,
                 message="Engine was reachable and the Studio endpoint returned, but no output image was returned or discovered. Check the Fooocus engine log.",
-                job_id=completed.job_id,
+                job_id=failed.job_id,
                 handoff_steps=notes,
-                output_paths=[],
-                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url, "required_api": self.api_name},
+                metadata={
+                    "normalized_job_path": str(job_path),
+                    "engine_url": self.engine_url,
+                    "required_api": self.api_name,
+                    "cancel_api": self.cancel_api_name,
+                },
             )
-        except Exception as exc:  # pragma: no cover - exercised through public result contract in tests.
+        except Exception as exc:
             failed = transition_job(running, EngineJobStatus.FAILED, error=str(exc))
             self._records[failed.job_id] = failed
             return AdapterResult(
@@ -180,7 +198,12 @@ class LocalFooocusAdapter:
                 message=f"Generation failed. Engine status: reachable. Reason: {type(exc).__name__}: {exc}",
                 job_id=failed.job_id,
                 handoff_steps=notes,
-                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url, "required_api": self.api_name},
+                metadata={
+                    "normalized_job_path": str(job_path),
+                    "engine_url": self.engine_url,
+                    "required_api": self.api_name,
+                    "cancel_api": self.cancel_api_name,
+                },
             )
 
     def _submit_to_engine(self, job: ImageStudioJob, job_id: str) -> List[str]:
@@ -218,7 +241,7 @@ class LocalFooocusAdapter:
                 return [response] if self._looks_like_image_path(response) else []
 
         if isinstance(response, dict):
-            if response.get("status") in {"failed", "error"}:
+            if response.get("status") in {"failed", "error", "cancelled"}:
                 raise RuntimeError(str(response.get("message") or response.get("error") or "Studio engine endpoint failed."))
             outputs = response.get("output_paths") or response.get("outputs") or response.get("images") or []
             if isinstance(outputs, str):
@@ -250,16 +273,47 @@ class LocalFooocusAdapter:
             EngineJobStatus.FAILED: AdapterJobStatus.FAILED,
             EngineJobStatus.CANCELED: AdapterJobStatus.CANCELLED,
         }
-        return AdapterResult(status=status_map[record.status], message=record.error or record.status.value, job_id=job_id, output_paths=record.outputs)
+        return AdapterResult(
+            status=status_map[record.status],
+            message=record.error or record.status.value,
+            job_id=job_id,
+            output_paths=record.outputs,
+        )
 
     def get_results(self, job_id: str) -> AdapterResult:
         status = self.get_status(job_id)
         if status.status == AdapterJobStatus.COMPLETED:
             return status
-        return AdapterResult(status=status.status, message="No completed results are available for this job yet.", job_id=job_id, output_paths=status.output_paths)
+        return AdapterResult(
+            status=status.status,
+            message="No completed results are available for this job yet.",
+            job_id=job_id,
+            output_paths=status.output_paths,
+        )
 
     def cancel(self, job_id: str) -> AdapterResult:
+        if not job_id:
+            return AdapterResult(status=AdapterJobStatus.FAILED, message="No active Studio job id was provided.")
+        try:
+            if self.is_engine_running():
+                client = self._build_client()
+                response = client.predict(json.dumps({"job_id": job_id}), api_name=self.cancel_api_name)
+                if isinstance(response, str):
+                    try:
+                        response = json.loads(response)
+                    except json.JSONDecodeError:
+                        response = {"message": response}
+                message = response.get("message", "Fooocus cancellation requested.") if isinstance(response, dict) else "Fooocus cancellation requested."
+            else:
+                message = "Fooocus engine is not reachable; local Studio job marked cancelled."
+        except Exception as exc:
+            return AdapterResult(
+                status=AdapterJobStatus.FAILED,
+                message=f"Cancellation failed: {type(exc).__name__}: {exc}",
+                job_id=job_id,
+            )
+
         record = self._records.get(job_id)
         if record is not None:
-            self._records[job_id] = transition_job(record, EngineJobStatus.CANCELED, error="Cancelled from Studio.")
-        return AdapterResult(status=AdapterJobStatus.CANCELLED, message="Stop requested from Studio. If Fooocus is already processing, use the engine stop control for hard cancellation.", job_id=job_id)
+            self._records[job_id] = transition_job(record, EngineJobStatus.CANCELED, error=message)
+        return AdapterResult(status=AdapterJobStatus.CANCELLED, message=message, job_id=job_id)
