@@ -10,6 +10,7 @@ from typing import Any
 
 STUDIO_GENERATE_API = "studio_generate"
 STUDIO_CANCEL_API = "studio_cancel"
+STUDIO_HEALTH_API = "studio_health"
 _ACTIVE_TASKS: dict[str, Any] = {}
 _ACTIVE_TASKS_LOCK = threading.Lock()
 _GENERATION_LOCK = threading.Lock()
@@ -182,6 +183,21 @@ def _coerce_paths(product: Any) -> list[str]:
     return []
 
 
+def _studio_health(payload_json: str = "{}") -> dict[str, Any]:
+    webui = sys.modules.get("webui")
+    controls_ready = bool(webui is not None and getattr(webui, "ctrls", None))
+    worker_ready = bool(webui is not None and getattr(getattr(webui, "worker", None), "async_tasks", None) is not None)
+    api_ready = controls_ready and worker_ready
+    return {
+        "status": "ok" if api_ready else "failed",
+        "message": "Studio engine endpoints are registered." if api_ready else "Fooocus web UI is not fully initialized.",
+        "apis": [f"/{STUDIO_HEALTH_API}", f"/{STUDIO_GENERATE_API}", f"/{STUDIO_CANCEL_API}"],
+        "controls_ready": controls_ready,
+        "worker_ready": worker_ready,
+        "active_job_count": len(_ACTIVE_TASKS),
+    }
+
+
 def _studio_generate(payload_json: str) -> dict[str, Any]:
     try:
         payload = json.loads(payload_json)
@@ -211,7 +227,7 @@ def _studio_generate(payload_json: str) -> dict[str, Any]:
                     if flag == "finish":
                         return {"status": "completed", "job_id": job_id, "output_paths": last_results}
                 if task.last_stop == "stop" and not task.processing:
-                    return {"status": "cancelled", "job_id": job_id, "output_paths": last_results}
+                    return {"status": "cancelled", "job_id": job_id, "message": "Generation cancelled from Studio.", "output_paths": last_results}
                 time.sleep(0.05)
             task.last_stop = "stop"
             raise TimeoutError("Fooocus generation exceeded the one-hour Studio timeout.")
@@ -248,6 +264,17 @@ def _attach_endpoints(blocks: Any) -> None:
     import gradio as gr
 
     with blocks:
+        health_input = gr.Textbox(visible=False)
+        health_output = gr.JSON(visible=False)
+        health_button = gr.Button(visible=False)
+        health_button.click(
+            _studio_health,
+            inputs=health_input,
+            outputs=health_output,
+            api_name=STUDIO_HEALTH_API,
+            queue=False,
+        )
+
         generate_input = gr.Textbox(visible=False)
         generate_output = gr.JSON(visible=False)
         generate_button = gr.Button(visible=False)
