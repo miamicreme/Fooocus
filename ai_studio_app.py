@@ -2,9 +2,9 @@ import gradio as gr
 
 from local_markup.studio_workflow_controller import (
     build_studio_workflow_outputs,
-    enhance_latest_result,
     load_generation_results,
     stop_studio_generation,
+    submit_studio_enhancement,
     submit_studio_generation,
     use_latest_result_as_reference,
 )
@@ -72,13 +72,13 @@ def build_app():
                     generate_btn = gr.Button("Generate in Studio", variant="primary")
 
                 with gr.Column(scale=1):
-                    gr.Markdown("## References\nUpload only what matters. Studio passes these paths into the generation job.")
+                    gr.Markdown("## References\nUpload only what matters. Studio sends these images directly to the local engine.")
                     image_1 = gr.Image(label="Reference 1: main subject, source image, or face", type="filepath")
                     image_2 = gr.Image(label="Reference 2: optional mask, style, or support image", type="filepath")
                     image_3 = gr.Image(label="Reference 3: optional pose, layout, or extra angle", type="filepath")
 
             gr.Markdown(value=copy_controls_summary())
-            gr.Markdown("Use copy buttons only for fallback/debugging. Normal flow is Generate in Studio.")
+            gr.Markdown("Copy controls are fallback/debugging tools. Normal generation stays entirely inside Studio.")
             with gr.Row():
                 selected_tool = copyable_textbox(label="Selected Studio workflow", interactive=False)
                 selected_area = copyable_textbox(label="Fooocus engine area", interactive=False)
@@ -93,6 +93,7 @@ def build_app():
 
             with gr.Accordion("Generate controls", open=True):
                 generation_status = gr.Markdown(value="## Generation status\n\nReady. Build a plan or click **Generate in Studio**.")
+                active_job_id = gr.Textbox(visible=False)
                 with gr.Row():
                     stop_btn = gr.Button("Stop", variant="stop")
                     regenerate_btn = gr.Button("Regenerate", variant="secondary")
@@ -127,13 +128,22 @@ def build_app():
             with gr.Accordion("Full reasoning", open=False):
                 agent_plan = gr.Markdown(label="Agent plan")
 
-            generation_inputs = [goal, image_1, image_2, image_3, wants_identity, wants_exact_edit, wants_bundle, vram_gb, primary_prompt, negative_prompt]
-            generation_outputs = [generation_status, generation_gallery, latest_result_file, latest_result_path, adapter_preview, history_preview]
+            generation_inputs = [
+                goal, image_1, image_2, image_3, wants_identity, wants_exact_edit,
+                wants_bundle, vram_gb, primary_prompt, negative_prompt,
+            ]
+            generation_outputs = [
+                generation_status, generation_gallery, latest_result_file, latest_result_path,
+                adapter_preview, history_preview, active_job_id,
+            ]
 
             plan_btn.click(
                 build_studio_workflow_outputs,
                 inputs=[goal, image_1, image_2, image_3, wants_identity, wants_exact_edit, wants_bundle, vram_gb],
-                outputs=[agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area, shot_prompts, handoff_recipe, adapter_preview, history_preview],
+                outputs=[
+                    agent_plan, primary_prompt, negative_prompt, selected_tool, selected_area,
+                    shot_prompts, handoff_recipe, adapter_preview, history_preview,
+                ],
                 queue=False,
             )
             generate_btn.click(
@@ -149,8 +159,18 @@ def build_app():
                 queue=True,
             )
             stop_btn.click(stop_studio_generation, outputs=generation_status, queue=False)
-            enhance_btn.click(enhance_latest_result, inputs=latest_result_path, outputs=generation_status, queue=False)
-            use_reference_btn.click(use_latest_result_as_reference, inputs=latest_result_path, outputs=generation_status, queue=False)
+            enhance_btn.click(
+                submit_studio_enhancement,
+                inputs=[latest_result_path, primary_prompt, negative_prompt, vram_gb],
+                outputs=generation_outputs,
+                queue=True,
+            )
+            use_reference_btn.click(
+                use_latest_result_as_reference,
+                inputs=latest_result_path,
+                outputs=[image_1, generation_status],
+                queue=False,
+            )
             open_history_btn.click(open_history_message, outputs=generation_status, queue=False)
             refresh_results_btn.click(
                 load_generation_results,
@@ -205,11 +225,10 @@ def build_app():
                 "## How to use this control UI\n\n"
                 "1. Double-click `START_HERE.bat` or `RUN_STUDIO_ONE_UI.bat`.\n"
                 "2. Work from `http://127.0.0.1:7872`.\n"
-                "3. Use **Studio Control Center** first.\n"
-                "4. Enter your image goal and references.\n"
-                "5. Click **Generate in Studio**.\n"
-                "6. Review the returned result in the Studio gallery.\n"
-                "7. Download, regenerate, enhance, or use the result as a new reference.\n\n"
+                "3. Enter your image goal and optional references.\n"
+                "4. Click **Generate in Studio**.\n"
+                "5. Review the returned result in the Studio gallery.\n"
+                "6. Download, regenerate, enhance, or load the result as Reference 1.\n\n"
                 "The raw Fooocus engine stays hidden unless debugging is needed."
             )
 
