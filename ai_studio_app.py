@@ -2,6 +2,7 @@ import gradio as gr
 
 from local_markup.studio_workflow_controller import (
     build_studio_workflow_outputs,
+    check_engine_health,
     load_generation_results,
     stop_studio_generation,
     submit_studio_enhancement,
@@ -95,6 +96,7 @@ def build_app():
                 generation_status = gr.Markdown(value="## Generation status\n\nReady. Build a plan or click **Generate in Studio**.")
                 active_job_id = gr.Textbox(visible=False)
                 with gr.Row():
+                    health_btn = gr.Button("Check Engine Health", variant="secondary")
                     stop_btn = gr.Button("Stop", variant="stop")
                     regenerate_btn = gr.Button("Regenerate", variant="secondary")
                     enhance_btn = gr.Button("Enhance", variant="secondary")
@@ -146,6 +148,7 @@ def build_app():
                 ],
                 queue=False,
             )
+            health_btn.click(check_engine_health, outputs=generation_status, queue=False)
             generate_btn.click(
                 submit_studio_generation,
                 inputs=generation_inputs,
@@ -226,9 +229,10 @@ def build_app():
                 "1. Double-click `START_HERE.bat` or `RUN_STUDIO_ONE_UI.bat`.\n"
                 "2. Work from `http://127.0.0.1:7872`.\n"
                 "3. Enter your image goal and optional references.\n"
-                "4. Click **Generate in Studio**.\n"
-                "5. Review the returned result in the Studio gallery.\n"
-                "6. Download, regenerate, enhance, or load the result as Reference 1.\n\n"
+                "4. Click **Check Engine Health** once after launch.\n"
+                "5. Click **Generate in Studio**.\n"
+                "6. Review the returned result in the Studio gallery.\n"
+                "7. Download, regenerate, enhance, or load the result as Reference 1.\n\n"
                 "The raw Fooocus engine stays hidden unless debugging is needed."
             )
 
