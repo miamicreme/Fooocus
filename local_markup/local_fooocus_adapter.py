@@ -123,9 +123,9 @@ class LocalFooocusAdapter:
                 continue
         return [str(path) for path in sorted(candidates, key=lambda item: item.stat().st_mtime)]
 
-    def submit(self, job: ImageStudioJob) -> AdapterResult:
+    def submit(self, job: ImageStudioJob, job_id: Optional[str] = None) -> AdapterResult:
         request = job.to_engine_request()
-        queued = create_queued_record(request)
+        queued = create_queued_record(request, job_id=job_id)
         job_path = self.write_normalized_job(job, queued.job_id)
         notes = [
             f"Normalized Studio job saved: {job_path}",
