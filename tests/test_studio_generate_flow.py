@@ -4,7 +4,12 @@ import json
 from pathlib import Path
 
 from local_markup.engine_queue_contract import EngineJobKind
-from local_markup.local_fooocus_adapter import LocalFooocusAdapter, STUDIO_ENGINE_API_NAME
+from local_markup.local_fooocus_adapter import (
+    LocalFooocusAdapter,
+    STUDIO_CANCEL_API_NAME,
+    STUDIO_ENGINE_API_NAME,
+    STUDIO_HEALTH_API_NAME,
+)
 from local_markup.studio_adapter_contract import AdapterJobStatus, ImageStudioJob, ReferenceImage
 from local_markup.studio_generation_history import add_adapter_result_to_history
 from local_markup.studio_history import StudioHistoryStore, load_history, save_history
@@ -27,10 +32,11 @@ class FakeStudioEngineClient:
         return self.response
 
 
-def test_studio_ui_has_generate_controls_and_gallery() -> None:
+def test_studio_ui_has_generate_controls_health_and_gallery() -> None:
     content = Path("ai_studio_app.py").read_text(encoding="utf-8")
 
     assert "Generate in Studio" in content
+    assert "Check Engine Health" in content
     assert "Stop" in content
     assert "Regenerate" in content
     assert "Enhance" in content
@@ -70,6 +76,8 @@ def test_local_fooocus_adapter_reports_engine_unavailable_without_handoff(tmp_pa
     assert result.job_id
     assert result.metadata["normalized_job_path"].endswith(".json")
     assert result.metadata["required_api"] == STUDIO_ENGINE_API_NAME
+    assert result.metadata["cancel_api"] == STUDIO_CANCEL_API_NAME
+    assert result.metadata["health_api"] == STUDIO_HEALTH_API_NAME
 
 
 def test_local_fooocus_adapter_accepts_real_output_paths_from_callable(tmp_path) -> None:
@@ -122,23 +130,63 @@ def test_adapter_calls_only_stable_studio_engine_endpoint(tmp_path) -> None:
     assert fake_client.calls[0][0]["prompt"] == "prompt"
 
 
-def test_adapter_does_not_guess_raw_fooocus_gradio_payload() -> None:
+def test_adapter_health_calls_only_stable_health_endpoint(tmp_path) -> None:
+    fake_client = FakeStudioEngineClient(
+        {
+            "status": "ok",
+            "message": "healthy",
+            "apis": [STUDIO_HEALTH_API_NAME, STUDIO_ENGINE_API_NAME, STUDIO_CANCEL_API_NAME],
+            "controls_ready": True,
+            "worker_ready": True,
+            "active_job_count": 0,
+        }
+    )
+    adapter = LocalFooocusAdapter(job_dir=tmp_path / "jobs", client_factory=lambda url: fake_client)
+    adapter.is_engine_running = lambda timeout=1.0: True  # type: ignore[method-assign]
+
+    result = adapter.health()
+
+    assert result.status == AdapterJobStatus.COMPLETED
+    assert fake_client.calls[0][1] == STUDIO_HEALTH_API_NAME
+    assert result.metadata["controls_ready"] == "True"
+    assert result.metadata["worker_ready"] == "True"
+
+
+def test_adapter_does_not_guess_raw_fooocus_gradio_payload_or_outputs() -> None:
     content = Path("local_markup/local_fooocus_adapter.py").read_text(encoding="utf-8")
 
     assert "view_api" not in content
     assert "full Gradio control payload" not in content
+    assert "discover_recent_outputs" not in content
     assert STUDIO_ENGINE_API_NAME in content
 
 
-def test_generation_history_persists_output_paths(tmp_path) -> None:
+def test_fooocus_launch_registers_stable_studio_endpoints() -> None:
+    launch_content = Path("launch.py").read_text(encoding="utf-8")
+    endpoint_content = Path("local_markup/studio_engine_endpoint.py").read_text(encoding="utf-8")
+
+    assert "install_studio_endpoint_launch_hook" in launch_content
+    assert "install_studio_endpoint_launch_hook()" in launch_content
+    assert "STUDIO_HEALTH_API" in endpoint_content
+    assert "STUDIO_GENERATE_API" in endpoint_content
+    assert "STUDIO_CANCEL_API" in endpoint_content
+    assert "api_name=STUDIO_HEALTH_API" in endpoint_content
+    assert "api_name=STUDIO_GENERATE_API" in endpoint_content
+    assert "api_name=STUDIO_CANCEL_API" in endpoint_content
+
+
+def test_generation_history_persists_output_paths_atomically(tmp_path) -> None:
     job = ImageStudioJob(goal="goal", prompt="prompt", negative_prompt="negative", kind=EngineJobKind.TEXT_TO_IMAGE)
     result = LocalFooocusAdapter(engine_port=9, job_dir=tmp_path / "jobs").cancel("job-1")
     store = add_adapter_result_to_history(StudioHistoryStore(), job, result, image_paths=["outputs/a.png", "outputs/b.png"])
     path = save_history(store, tmp_path / "history.json")
     loaded = load_history(path)
+    source = Path("local_markup/studio_history.py").read_text(encoding="utf-8")
 
     assert loaded.latest(1)[0].image_paths == ["outputs/a.png", "outputs/b.png"]
     assert loaded.latest(1)[0].metadata["output_count"] == "2"
+    assert "_HISTORY_WRITE_LOCK" in source
+    assert ".replace(output_path)" in source
 
 
 def test_submit_generation_run_returns_gallery_contract_when_engine_unavailable(tmp_path, monkeypatch) -> None:
@@ -178,3 +226,14 @@ def test_load_generation_results_returns_gallery_tuple(tmp_path, monkeypatch) ->
     assert downloadable is None
     assert latest_path == ""
     assert "Local Session History" in history_markdown
+
+
+def test_one_click_verifier_exists() -> None:
+    script = Path("scripts/verify_studio_engine.py").read_text(encoding="utf-8")
+    launcher = Path("VERIFY_STUDIO_ENGINE.bat").read_text(encoding="utf-8")
+
+    assert STUDIO_HEALTH_API_NAME in script
+    assert STUDIO_ENGINE_API_NAME in script
+    assert STUDIO_CANCEL_API_NAME in script
+    assert "--generate" in script
+    assert "verify_studio_engine.py" in launcher
