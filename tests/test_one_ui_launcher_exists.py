@@ -3,22 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_one_ui_launcher_routes_through_safe_studio_script() -> None:
+def test_one_ui_launcher_is_one_click_full_startup() -> None:
     content = Path("RUN_STUDIO_ONE_UI.bat").read_text(encoding="utf-8")
     normalized = content.replace("/", "\\")
 
     assert r"scripts\run_studio_one_ui.ps1" in normalized
-    assert "Engine auto-start is OFF" in content
-    assert "-StartEngine" not in content
-
-
-def test_one_ui_launcher_self_syncs_before_launching() -> None:
-    content = Path("RUN_STUDIO_ONE_UI.bat").read_text(encoding="utf-8")
-
-    assert "FOOOCUS_SKIP_SELF_SYNC" in content
+    assert "One-click mode" in content
     assert "git fetch origin" in content
     assert "git checkout studio/designed-control-ui" in content
     assert "git reset --hard origin/studio/designed-control-ui" in content
+    assert "-StartEngine" in content
+    assert "-OpenBrowser" in content
     assert 'call "%~f0"' in content
 
 
