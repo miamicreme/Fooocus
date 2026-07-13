@@ -16,7 +16,8 @@ def test_ai_studio_app_uses_copy_controls_and_separate_engine_status() -> None:
     source = inspect.getsource(ai_studio_app.build_app)
 
     assert "Engine status" in source
-    assert "Use copy buttons" in source or "copy buttons" in source
+    assert "Copy controls" in source or "copy buttons" in source
+    assert "fallback/debugging" in source
     assert "copyable_textbox" in source
     assert "RUN_FOOOCUS_ENGINE_ONLY.bat" in source
 
