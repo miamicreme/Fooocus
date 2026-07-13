@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from time import time
+from time import time, time_ns
 from typing import Dict, List, Optional
 
 
 DEFAULT_HISTORY_PATH = Path("logs") / "studio" / "studio_generation_history.json"
+_HISTORY_WRITE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -47,7 +50,11 @@ class StudioHistoryStore:
     def save(self, path: Path | str = DEFAULT_HISTORY_PATH) -> Path:
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        payload = json.dumps(self.to_dict(), indent=2)
+        tmp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.{time_ns()}.tmp")
+        with _HISTORY_WRITE_LOCK:
+            tmp_path.write_text(payload, encoding="utf-8")
+            tmp_path.replace(output_path)
         return output_path
 
     @classmethod
@@ -82,7 +89,6 @@ class StudioHistoryStore:
         return cls(items=items)
 
 
-
 def load_history(path: Path | str = DEFAULT_HISTORY_PATH) -> StudioHistoryStore:
     input_path = Path(path)
     if not input_path.exists():
@@ -96,10 +102,8 @@ def load_history(path: Path | str = DEFAULT_HISTORY_PATH) -> StudioHistoryStore:
     return StudioHistoryStore.from_dict(data)
 
 
-
 def save_history(store: StudioHistoryStore, path: Path | str = DEFAULT_HISTORY_PATH) -> Path:
     return store.save(path)
-
 
 
 def create_history_item(
