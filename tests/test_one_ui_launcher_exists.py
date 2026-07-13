@@ -44,3 +44,13 @@ def test_engine_wait_script_uses_separate_stdout_and_stderr_logs() -> None:
     assert "RedirectStandardError $EngineErrLog" in content
     assert "RedirectStandardOutput $StudioOutLog" in content
     assert "RedirectStandardError $StudioErrLog" in content
+
+
+def test_studio_launcher_keeps_window_attached_and_uses_direct_engine_launch() -> None:
+    content = Path("scripts/run_studio_one_ui.ps1").read_text(encoding="utf-8")
+
+    assert "Watch-Studio" in content
+    assert "Keep this launcher window open while working" in content
+    assert "Start-Sleep -Seconds 5" in content
+    assert '"launch.py", "--disable-analytics", "--disable-in-browser"' in content
+    assert "scripts\\run_fooocus_keepalive.py" not in content
