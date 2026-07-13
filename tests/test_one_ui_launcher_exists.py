@@ -3,6 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def test_start_here_launcher_calls_one_click_launcher() -> None:
+    content = Path("START_HERE.bat").read_text(encoding="utf-8")
+
+    assert "Starting AI Studio the simple way" in content
+    assert "call RUN_STUDIO_ONE_UI.bat" in content
+
+
 def test_one_ui_launcher_is_one_click_full_startup() -> None:
     content = Path("RUN_STUDIO_ONE_UI.bat").read_text(encoding="utf-8")
     normalized = content.replace("/", "\\")
