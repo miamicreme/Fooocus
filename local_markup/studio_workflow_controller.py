@@ -399,6 +399,24 @@ def submit_studio_enhancement(latest_path: str, prompt: str, negative_prompt: st
         return message, [], None, latest_path or "", "", history_markdown(load_history()), ""
 
 
+def check_engine_health() -> str:
+    result = _LIVE_ADAPTER.health()
+    metadata_lines = [
+        f"- Engine URL: `{result.metadata.get('engine_url', 'unknown')}`",
+        f"- Health API: `{result.metadata.get('health_api', 'unknown')}`",
+        f"- Generate API: `{result.metadata.get('required_api', 'unknown')}`",
+        f"- Cancel API: `{result.metadata.get('cancel_api', 'unknown')}`",
+        f"- Controls ready: `{result.metadata.get('controls_ready', 'unknown')}`",
+        f"- Worker ready: `{result.metadata.get('worker_ready', 'unknown')}`",
+        f"- Active jobs: `{result.metadata.get('active_job_count', 'unknown')}`",
+    ]
+    return (
+        f"## Engine health: {result.status.value}\n\n"
+        f"{result.message}\n\n"
+        + "\n".join(metadata_lines)
+    )
+
+
 def poll_generation_status(job_id: str) -> str:
     if not job_id:
         return "## Generation status\n\nNo active job selected."
