@@ -5,7 +5,7 @@ import socket
 from dataclasses import dataclass
 from pathlib import Path
 from time import time
-from typing import Callable, Iterable, List, Optional
+from typing import Any, Callable, Iterable, List, Optional
 
 from local_markup.engine_queue_contract import EngineJobRecord, EngineJobStatus, create_queued_record, transition_job
 from local_markup.studio_adapter_contract import AdapterJobStatus, AdapterResult, ImageStudioJob
@@ -14,6 +14,7 @@ from local_markup.studio_adapter_contract import AdapterJobStatus, AdapterResult
 STUDIO_JOB_DIR = Path("logs") / "studio" / "jobs"
 FOOOCUS_OUTPUT_DIR = Path("outputs")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+STUDIO_ENGINE_API_NAME = "/studio_generate"
 
 
 @dataclass(frozen=True)
@@ -51,11 +52,11 @@ class LocalDryRunFooocusAdapter:
 class LocalFooocusAdapter:
     """Local Studio-to-Fooocus adapter.
 
-    This adapter owns the top-shelf Studio contract: Studio builds one normalized
-    job, confirms the local Fooocus engine is reachable, submits through an
-    injectable generation callable when available, and always records the job and
-    discovered output files. The callable hook keeps the contract testable while
-    the live Fooocus Gradio surface remains a separate engine process.
+    Studio must not guess the raw Fooocus Gradio payload. The only supported
+    automatic path is a known Studio-facing engine endpoint, `/studio_generate`,
+    that accepts the normalized Studio job JSON and returns output paths. This
+    keeps the one-click Studio flow stable and prevents silent fallback to
+    browser-copy behavior.
     """
 
     name = "local_fooocus"
@@ -67,12 +68,16 @@ class LocalFooocusAdapter:
         output_dir: Path | str = FOOOCUS_OUTPUT_DIR,
         job_dir: Path | str = STUDIO_JOB_DIR,
         generate_callable: Optional[Callable[[dict[str, object]], Iterable[str] | str | None]] = None,
+        client_factory: Optional[Callable[[str], Any]] = None,
+        api_name: str = STUDIO_ENGINE_API_NAME,
     ) -> None:
         self.engine_host = engine_host
         self.engine_port = engine_port
         self.output_dir = Path(output_dir)
         self.job_dir = Path(job_dir)
         self.generate_callable = generate_callable
+        self.client_factory = client_factory
+        self.api_name = api_name
         self._records: dict[str, EngineJobRecord] = {}
 
     @property
@@ -90,6 +95,7 @@ class LocalFooocusAdapter:
         payload = job.normalized_payload()
         payload["engine_url"] = self.engine_url
         payload["adapter"] = self.name
+        payload["required_api"] = self.api_name
         return payload
 
     def write_normalized_job(self, job: ImageStudioJob, job_id: str) -> Path:
@@ -122,6 +128,7 @@ class LocalFooocusAdapter:
         notes = [
             f"Normalized Studio job saved: {job_path}",
             f"Engine URL checked: {self.engine_url}",
+            f"Required Studio API: {self.api_name}",
             f"Workflow: {request.kind.value}",
             f"Reference count: {len(request.references)}",
         ]
@@ -134,7 +141,7 @@ class LocalFooocusAdapter:
                 message="Generation failed before submission. Engine status: unavailable. Reason: connection refused on local engine. Start Fooocus engine and retry.",
                 job_id=failed.job_id,
                 handoff_steps=notes,
-                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url},
+                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url, "required_api": self.api_name},
             )
 
         running = transition_job(queued, EngineJobStatus.RUNNING)
@@ -155,17 +162,17 @@ class LocalFooocusAdapter:
                     handoff_steps=notes,
                     output_paths=output_paths,
                     progress_percent=100.0,
-                    metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url},
+                    metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url, "required_api": self.api_name},
                 )
             return AdapterResult(
                 status=AdapterJobStatus.FAILED,
-                message="Engine was reachable, but no output image was returned or discovered. Check the Fooocus engine log.",
+                message="Engine was reachable and the Studio endpoint returned, but no output image was returned or discovered. Check the Fooocus engine log.",
                 job_id=completed.job_id,
                 handoff_steps=notes,
                 output_paths=[],
-                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url},
+                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url, "required_api": self.api_name},
             )
-        except Exception as exc:  # pragma: no cover - message path is tested through public result contract.
+        except Exception as exc:  # pragma: no cover - exercised through public result contract in tests.
             failed = transition_job(running, EngineJobStatus.FAILED, error=str(exc))
             self._records[failed.job_id] = failed
             return AdapterResult(
@@ -173,32 +180,64 @@ class LocalFooocusAdapter:
                 message=f"Generation failed. Engine status: reachable. Reason: {type(exc).__name__}: {exc}",
                 job_id=failed.job_id,
                 handoff_steps=notes,
-                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url},
+                metadata={"normalized_job_path": str(job_path), "engine_url": self.engine_url, "required_api": self.api_name},
             )
 
     def _submit_to_engine(self, job: ImageStudioJob, job_id: str) -> List[str]:
-        if self.generate_callable is not None:
-            result = self.generate_callable(self.normalize_job(job))
-            if result is None:
-                return []
-            if isinstance(result, str):
-                return [result]
-            return [str(item) for item in result]
+        payload = self.normalize_job(job)
+        payload["job_id"] = job_id
 
-        # The current Fooocus Gradio app is a full interactive UI, not a small
-        # stable REST endpoint. Keep this method explicit so Studio fails cleanly
-        # instead of pretending a browser-copy workflow is automatic.
+        if self.generate_callable is not None:
+            return self._coerce_output_paths(self.generate_callable(payload))
+
+        client = self._build_client()
+        response = client.predict(json.dumps(payload), api_name=self.api_name)
+        return self._parse_engine_response(response)
+
+    def _build_client(self) -> Any:
+        if self.client_factory is not None:
+            return self.client_factory(self.engine_url)
         try:
             from gradio_client import Client  # type: ignore
         except Exception as exc:
-            raise RuntimeError("gradio_client is not installed, so Studio cannot call the local engine API yet.") from exc
+            raise RuntimeError("gradio_client is not installed, so Studio cannot call the stable local engine endpoint yet.") from exc
+        return Client(self.engine_url)
 
-        client = Client(self.engine_url)
-        api_info = client.view_api(return_format="dict")
-        api_text = json.dumps(api_info, default=str).lower()
-        if "generate" not in api_text:
-            raise RuntimeError("Fooocus is running, but it does not expose a stable generate API endpoint for Studio yet.")
-        raise RuntimeError("Fooocus generate endpoint was detected, but the current engine UI requires its full Gradio control payload before automatic generation can be safely enabled.")
+    def _coerce_output_paths(self, raw: Iterable[str] | str | None) -> List[str]:
+        if raw is None:
+            return []
+        if isinstance(raw, str):
+            return [raw]
+        return [str(item) for item in raw]
+
+    def _parse_engine_response(self, response: Any) -> List[str]:
+        if isinstance(response, str):
+            try:
+                response = json.loads(response)
+            except json.JSONDecodeError:
+                return [response] if self._looks_like_image_path(response) else []
+
+        if isinstance(response, dict):
+            if response.get("status") in {"failed", "error"}:
+                raise RuntimeError(str(response.get("message") or response.get("error") or "Studio engine endpoint failed."))
+            outputs = response.get("output_paths") or response.get("outputs") or response.get("images") or []
+            if isinstance(outputs, str):
+                return [outputs]
+            return [str(item) for item in outputs]
+
+        if isinstance(response, list):
+            paths: list[str] = []
+            for item in response:
+                if isinstance(item, dict):
+                    paths.extend(self._parse_engine_response(item))
+                elif item is not None:
+                    paths.append(str(item))
+            return paths
+
+        return []
+
+    def _looks_like_image_path(self, value: str) -> bool:
+        return Path(value).suffix.lower() in IMAGE_EXTENSIONS
 
     def get_status(self, job_id: str) -> AdapterResult:
         record = self._records.get(job_id)
