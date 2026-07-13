@@ -78,6 +78,7 @@ def build_app():
                     image_3 = gr.Image(label="Reference 3: optional pose, layout, or extra angle", type="filepath")
 
             gr.Markdown(value=copy_controls_summary())
+            gr.Markdown("Use copy buttons only for fallback/debugging. Normal flow is Generate in Studio.")
             with gr.Row():
                 selected_tool = copyable_textbox(label="Selected Studio workflow", interactive=False)
                 selected_area = copyable_textbox(label="Fooocus engine area", interactive=False)
@@ -103,7 +104,7 @@ def build_app():
                     latest_result_path = copyable_textbox(label="Copy latest result path", interactive=False)
 
             with gr.Accordion("Results gallery", open=True):
-                generation_gallery = gr.Gallery(label="Studio generated image history", value=[], visible=True, columns=4, height=360)
+                generation_gallery = gr.Gallery(label="Generated image history", value=[], visible=True, columns=4, height=360)
 
             with gr.Accordion("Review before generating", open=True):
                 adapter_preview = gr.Markdown(label="Adapter preview")
@@ -120,7 +121,7 @@ def build_app():
             with gr.Accordion("Engine status", open=False):
                 gr.Markdown(
                     "Studio owns the normal workflow. Fooocus runs as the hidden local engine at `http://127.0.0.1:7865`. "
-                    "Open the raw engine only for debugging."
+                    "Open the raw engine only for debugging with `RUN_FOOOCUS_ENGINE_ONLY.bat`."
                 )
 
             with gr.Accordion("Full reasoning", open=False):
