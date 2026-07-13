@@ -16,6 +16,7 @@ FOOOCUS_OUTPUT_DIR = Path("outputs")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 STUDIO_ENGINE_API_NAME = "/studio_generate"
 STUDIO_CANCEL_API_NAME = "/studio_cancel"
+STUDIO_HEALTH_API_NAME = "/studio_health"
 
 
 class StudioGenerationCancelled(RuntimeError):
@@ -57,9 +58,10 @@ class LocalDryRunFooocusAdapter:
 class LocalFooocusAdapter:
     """Stable local Studio-to-Fooocus adapter.
 
-    Studio calls only the explicit `/studio_generate` and `/studio_cancel`
-    endpoints registered by the Fooocus launch hook. It never attempts to infer
-    the raw Fooocus Gradio control payload or guess outputs from the filesystem.
+    Studio calls only the explicit `/studio_generate`, `/studio_cancel`, and
+    `/studio_health` endpoints registered by the Fooocus launch hook. It never
+    attempts to infer the raw Fooocus Gradio control payload or guess outputs
+    from the filesystem.
     """
 
     name = "local_fooocus"
@@ -74,6 +76,7 @@ class LocalFooocusAdapter:
         client_factory: Optional[Callable[[str], Any]] = None,
         api_name: str = STUDIO_ENGINE_API_NAME,
         cancel_api_name: str = STUDIO_CANCEL_API_NAME,
+        health_api_name: str = STUDIO_HEALTH_API_NAME,
     ) -> None:
         self.engine_host = engine_host
         self.engine_port = engine_port
@@ -83,6 +86,7 @@ class LocalFooocusAdapter:
         self.client_factory = client_factory
         self.api_name = api_name
         self.cancel_api_name = cancel_api_name
+        self.health_api_name = health_api_name
         self._records: dict[str, EngineJobRecord] = {}
 
     @property
@@ -102,6 +106,7 @@ class LocalFooocusAdapter:
         payload["adapter"] = self.name
         payload["required_api"] = self.api_name
         payload["cancel_api"] = self.cancel_api_name
+        payload["health_api"] = self.health_api_name
         return payload
 
     def write_normalized_job(self, job: ImageStudioJob, job_id: str) -> Path:
@@ -129,6 +134,7 @@ class LocalFooocusAdapter:
             "engine_url": self.engine_url,
             "required_api": self.api_name,
             "cancel_api": self.cancel_api_name,
+            "health_api": self.health_api_name,
         }
 
         if not self.is_engine_running():
@@ -186,6 +192,47 @@ class LocalFooocusAdapter:
                 message=f"Generation failed. Engine status: reachable. Reason: {type(exc).__name__}: {exc}",
                 job_id=failed.job_id,
                 handoff_steps=notes,
+                metadata=metadata,
+            )
+
+    def health(self) -> AdapterResult:
+        metadata = {
+            "engine_url": self.engine_url,
+            "required_api": self.api_name,
+            "cancel_api": self.cancel_api_name,
+            "health_api": self.health_api_name,
+        }
+        if not self.is_engine_running():
+            return AdapterResult(
+                status=AdapterJobStatus.FAILED,
+                message="Fooocus engine is not reachable on the local port.",
+                metadata=metadata,
+            )
+        try:
+            client = self._build_client()
+            response = client.predict(json.dumps({"check": "studio"}), api_name=self.health_api_name)
+            if isinstance(response, str):
+                response = json.loads(response)
+            if not isinstance(response, dict):
+                raise RuntimeError("Studio health endpoint returned an unexpected response.")
+            status = str(response.get("status") or "unknown")
+            metadata.update({str(key): str(value) for key, value in response.items()})
+            if status == "ok":
+                return AdapterResult(
+                    status=AdapterJobStatus.COMPLETED,
+                    message="Studio engine endpoint is healthy.",
+                    progress_percent=100.0,
+                    metadata=metadata,
+                )
+            return AdapterResult(
+                status=AdapterJobStatus.FAILED,
+                message=str(response.get("message") or f"Studio health endpoint returned status {status}."),
+                metadata=metadata,
+            )
+        except Exception as exc:
+            return AdapterResult(
+                status=AdapterJobStatus.FAILED,
+                message=f"Studio health check failed: {type(exc).__name__}: {exc}",
                 metadata=metadata,
             )
 
