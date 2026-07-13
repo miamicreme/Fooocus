@@ -10,6 +10,7 @@ if not exist "%TEMP%\fooocus" mkdir "%TEMP%\fooocus"
 
 echo Starting Fooocus engine only.
 echo Local URL: http://127.0.0.1:7865
+echo stable command: launch.py --disable-analytics --disable-in-browser
 echo.
 %PYTHON_CMD% launch.py --disable-analytics --disable-in-browser
 
