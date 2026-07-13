@@ -47,7 +47,7 @@ def prepare_environment():
                 else:
                     print("Installation of xformers is not supported in this version of Python.")
                     print(
-                        "You can also check this and build manually: https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Xformers#building-xformers-on-windows-by-duckness")
+                        "You can also check this and build manually: https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Xformers#building-xformers-by-duckness")
                     if not is_installed("xformers"):
                         exit(0)
             elif platform.system() == "Linux":
@@ -88,7 +88,6 @@ from modules import config
 from modules.hash_cache import init_cache
 
 os.environ["U2NET_HOME"] = config.path_inpaint
-
 os.environ['GRADIO_TEMP_DIR'] = config.temp_path
 
 if config.temp_path_cleanup_on_launch:
@@ -127,7 +126,6 @@ def download_models(default_model, previous_default_models, checkpoint_downloads
                     checkpoint_downloads = {}
                     default_model = alternative_model_name
                     break
-
     for file_name, url in checkpoint_downloads.items():
         model_dir = os.path.dirname(get_file_from_folder_list(file_name, config.paths_checkpoints))
         load_file_from_url(url=url, model_dir=model_dir, file_name=file_name)
@@ -137,7 +135,8 @@ def download_models(default_model, previous_default_models, checkpoint_downloads
         model_dir = os.path.dirname(get_file_from_folder_list(file_name, config.paths_loras))
         load_file_from_url(url=url, model_dir=model_dir, file_name=file_name)
     for file_name, url in vae_downloads.items():
-        load_file_from_url(url=url, model_dir=config.path_vae, file_name=file_name)
+        model_dir = config.path_vae
+        load_file_from_url(url=url, model_dir=model_dir, file_name=file_name)
 
     return default_model, checkpoint_downloads
 
@@ -148,5 +147,9 @@ config.default_base_model_name, config.checkpoint_downloads = download_models(
 
 config.update_files()
 init_cache(config.model_filenames, config.paths_checkpoints, config.lora_filenames, config.paths_loras)
+
+from local_markup.studio_engine_endpoint import install_studio_endpoint_launch_hook
+
+install_studio_endpoint_launch_hook()
 
 from webui import *
