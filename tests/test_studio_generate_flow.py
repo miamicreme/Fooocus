@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from local_markup.engine_queue_contract import EngineJobKind
-from local_markup.local_fooocus_adapter import LocalFooocusAdapter
+from local_markup.local_fooocus_adapter import LocalFooocusAdapter, STUDIO_ENGINE_API_NAME
 from local_markup.studio_adapter_contract import AdapterJobStatus, ImageStudioJob, ReferenceImage
 from local_markup.studio_generation_history import add_adapter_result_to_history
 from local_markup.studio_history import StudioHistoryStore, load_history, save_history
@@ -14,6 +15,16 @@ from local_markup.studio_workflow_controller import (
     submit_generation_run,
 )
 from local_markup.ai_studio_agent_v2 import build_agent_plan
+
+
+class FakeStudioEngineClient:
+    def __init__(self, response):
+        self.response = response
+        self.calls = []
+
+    def predict(self, payload_json: str, api_name: str):
+        self.calls.append((json.loads(payload_json), api_name))
+        return self.response
 
 
 def test_studio_ui_has_generate_controls_and_gallery() -> None:
@@ -58,6 +69,7 @@ def test_local_fooocus_adapter_reports_engine_unavailable_without_handoff(tmp_pa
     assert "Engine status: unavailable" in result.message
     assert result.job_id
     assert result.metadata["normalized_job_path"].endswith(".json")
+    assert result.metadata["required_api"] == STUDIO_ENGINE_API_NAME
 
 
 def test_local_fooocus_adapter_accepts_real_output_paths_from_callable(tmp_path) -> None:
@@ -86,6 +98,36 @@ def test_local_fooocus_adapter_accepts_real_output_paths_from_callable(tmp_path)
     assert result.output_paths == [str(output_path)]
     assert result.progress_percent == 100.0
     assert adapter.get_results(result.job_id or "").output_paths == [str(output_path)]
+
+
+def test_adapter_calls_only_stable_studio_engine_endpoint(tmp_path) -> None:
+    output_path = tmp_path / "outputs" / "stable.png"
+    output_path.parent.mkdir(parents=True)
+    output_path.write_bytes(b"fake image bytes")
+    fake_client = FakeStudioEngineClient({"status": "completed", "output_paths": [str(output_path)]})
+    adapter = LocalFooocusAdapter(
+        job_dir=tmp_path / "jobs",
+        output_dir=tmp_path / "outputs",
+        client_factory=lambda url: fake_client,
+    )
+    adapter.is_engine_running = lambda timeout=1.0: True  # type: ignore[method-assign]
+    job = ImageStudioJob(goal="test", prompt="prompt", negative_prompt="negative", kind=EngineJobKind.TEXT_TO_IMAGE)
+
+    result = adapter.submit(job)
+
+    assert result.status == AdapterJobStatus.COMPLETED
+    assert result.output_paths == [str(output_path)]
+    assert fake_client.calls[0][1] == STUDIO_ENGINE_API_NAME
+    assert fake_client.calls[0][0]["required_api"] == STUDIO_ENGINE_API_NAME
+    assert fake_client.calls[0][0]["prompt"] == "prompt"
+
+
+def test_adapter_does_not_guess_raw_fooocus_gradio_payload() -> None:
+    content = Path("local_markup/local_fooocus_adapter.py").read_text(encoding="utf-8")
+
+    assert "view_api" not in content
+    assert "full Gradio control payload" not in content
+    assert STUDIO_ENGINE_API_NAME in content
 
 
 def test_generation_history_persists_output_paths(tmp_path) -> None:
