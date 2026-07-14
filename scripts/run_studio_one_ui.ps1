@@ -3,7 +3,8 @@ param(
     [switch]$OpenBrowser,
     [int]$EngineWaitSeconds = 180,
     [int]$StudioWaitSeconds = 120,
-    [int]$InitialEngineDelaySeconds = 30
+    [int]$InitialEngineDelaySeconds = 30,
+    [int]$EngineStableSeconds = 12
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,31 +52,66 @@ function Test-PortOpen {
 function Show-RecentLog {
     param([string]$Label, [string]$OutLog, [string]$ErrLog)
     Write-Host "Recent $Label stdout log: $OutLog"
-    if (Test-Path $OutLog) { Get-Content $OutLog -Tail 60 }
+    if (Test-Path $OutLog) { Get-Content $OutLog -Tail 80 }
     Write-Host "Recent $Label stderr log: $ErrLog"
-    if (Test-Path $ErrLog) { Get-Content $ErrLog -Tail 60 }
+    if (Test-Path $ErrLog) { Get-Content $ErrLog -Tail 80 }
 }
 
 function Wait-PortOpen {
-    param([string]$Name, [string]$HostName, [int]$Port, [int]$TimeoutSeconds)
+    param(
+        [string]$Name,
+        [string]$HostName,
+        [int]$Port,
+        [int]$TimeoutSeconds,
+        [System.Diagnostics.Process]$ProcessToWatch = $null
+    )
     $elapsed = 0
     while ($elapsed -lt $TimeoutSeconds) {
+        if ($ProcessToWatch -and $ProcessToWatch.HasExited) {
+            Write-Host "$Name process exited before port $Port stayed ready. Exit code: $($ProcessToWatch.ExitCode)"
+            return $false
+        }
         if (Test-PortOpen -HostName $HostName -Port $Port) {
-            Write-Host "$Name is ready on http://${HostName}:$Port after ${elapsed}s"
+            Write-Host "$Name is reachable on http://${HostName}:$Port after ${elapsed}s"
             return $true
         }
         Write-Host "Waiting for $Name on port $Port... ${elapsed}s elapsed, $($TimeoutSeconds - $elapsed)s remaining"
         Start-Sleep -Seconds 5
         $elapsed += 5
     }
-    Write-Host "WARNING: $Name was not ready on port $Port after ${TimeoutSeconds}s."
+    Write-Host "WARNING: $Name was not reachable on port $Port after ${TimeoutSeconds}s."
     return $false
+}
+
+function Test-StableEngine {
+    param([System.Diagnostics.Process]$EngineProcess)
+    Write-Host "Checking that Fooocus engine stays alive for ${EngineStableSeconds}s..."
+    Start-Sleep -Seconds $EngineStableSeconds
+    if ($EngineProcess -and $EngineProcess.HasExited) {
+        Write-Host "Fooocus engine exited during stability check. Exit code: $($EngineProcess.ExitCode)"
+        return $false
+    }
+    if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7865)) {
+        Write-Host "Fooocus engine port 7865 disappeared during stability check."
+        return $false
+    }
+    Write-Host "Checking Fooocus Studio engine health endpoint..."
+    $verifyOutput = & $PythonCmd "scripts\verify_studio_engine.py" 2>&1
+    $verifyCode = $LASTEXITCODE
+    $verifyOutput | ForEach-Object { Write-Host $_ }
+    if ($verifyCode -ne 0) {
+        Write-Host "Fooocus engine is reachable, but Studio health check failed."
+        return $false
+    }
+    Write-Host "Fooocus engine passed stability and Studio health checks."
+    return $true
 }
 
 function Watch-Studio {
     param(
         [System.Diagnostics.Process]$StudioProcess,
-        [System.Diagnostics.Process]$EngineProcess
+        [System.Diagnostics.Process]$EngineProcess,
+        [bool]$EngineUsable
     )
 
     Write-Host ""
@@ -99,7 +135,13 @@ function Watch-Studio {
 
             if ($EngineProcess -and $EngineProcess.HasExited -and -not $engineExitReported) {
                 $engineExitReported = $true
-                Write-Host "Optional Fooocus engine process exited with code $($EngineProcess.ExitCode). Studio will keep running."
+                Write-Host "Fooocus engine process exited with code $($EngineProcess.ExitCode). Generate in Studio will not work until the engine is fixed."
+                Show-RecentLog -Label "Fooocus engine" -OutLog $EngineOutLog -ErrLog $EngineErrLog
+            }
+
+            if ($EngineUsable -and -not (Test-PortOpen -HostName "127.0.0.1" -Port 7865) -and -not $engineExitReported) {
+                $engineExitReported = $true
+                Write-Host "Fooocus engine port 7865 is no longer reachable. Generate in Studio will not work until the engine is fixed."
                 Show-RecentLog -Label "Fooocus engine" -OutLog $EngineOutLog -ErrLog $EngineErrLog
             }
 
@@ -120,26 +162,29 @@ Write-Host "Using Python: $PythonCmd"
 Write-Host "Engine auto-start: $StartEngine"
 
 $EngineProcess = $null
+$EngineUsable = $false
 if ($StartEngine) {
     if (-not (Test-PortOpen -HostName "127.0.0.1" -Port 7865)) {
-        Write-Host "Starting optional Fooocus engine on http://127.0.0.1:7865"
+        Write-Host "Starting hidden Fooocus engine on http://127.0.0.1:7865"
         $EngineProcess = Start-Process -FilePath $PythonCmd -ArgumentList @("launch.py", "--disable-analytics", "--disable-in-browser") -WorkingDirectory $RepoRoot -RedirectStandardOutput $EngineOutLog -RedirectStandardError $EngineErrLog -WindowStyle Minimized -PassThru
         Write-Host "Waiting initial ${InitialEngineDelaySeconds}s for model/UI warmup before checking engine port..."
         Start-Sleep -Seconds $InitialEngineDelaySeconds
     }
     else {
-        Write-Host "Fooocus engine is already running on http://127.0.0.1:7865"
+        Write-Host "Fooocus engine is already reachable on http://127.0.0.1:7865"
     }
 
-    $engineReady = Wait-PortOpen -Name "Fooocus Engine" -HostName "127.0.0.1" -Port 7865 -TimeoutSeconds $EngineWaitSeconds
-    if (-not $engineReady) {
+    $engineReady = Wait-PortOpen -Name "Fooocus Engine" -HostName "127.0.0.1" -Port 7865 -TimeoutSeconds $EngineWaitSeconds -ProcessToWatch $EngineProcess
+    if ($engineReady) {
+        $EngineUsable = Test-StableEngine -EngineProcess $EngineProcess
+    }
+    if (-not $EngineUsable) {
         Show-RecentLog -Label "Fooocus engine" -OutLog $EngineOutLog -ErrLog $EngineErrLog
-        Write-Host "Continuing with Studio only. The engine URL will stay unavailable until Fooocus is started manually."
+        Write-Host "Studio will still open on http://127.0.0.1:7872, but Generate in Studio is disabled until the engine passes health."
     }
 }
 else {
-    Write-Host "Skipping Fooocus engine auto-start. This prevents repeated engine crash loops and duplicate windows."
-    Write-Host "Use RUN_FOOOCUS_ENGINE_ONLY.bat later when you want to test the engine manually."
+    Write-Host "Skipping Fooocus engine auto-start."
 }
 
 $startedStudio = $false
@@ -153,7 +198,7 @@ else {
     Write-Host "AI Studio is already running on http://127.0.0.1:7872"
 }
 
-$studioReady = Wait-PortOpen -Name "AI Studio" -HostName "127.0.0.1" -Port 7872 -TimeoutSeconds $StudioWaitSeconds
+$studioReady = Wait-PortOpen -Name "AI Studio" -HostName "127.0.0.1" -Port 7872 -TimeoutSeconds $StudioWaitSeconds -ProcessToWatch $StudioProcess
 if ($studioReady) {
     if ($OpenBrowser -or $startedStudio) {
         Write-Host "Opening AI Studio in browser once."
@@ -170,10 +215,15 @@ else {
 
 Write-Host ""
 Write-Host "Main UI: http://127.0.0.1:7872"
-Write-Host "Optional engine URL: http://127.0.0.1:7865"
+if ($EngineUsable) {
+    Write-Host "Hidden engine: healthy on http://127.0.0.1:7865"
+}
+else {
+    Write-Host "Hidden engine: NOT HEALTHY. Do not use http://127.0.0.1:7865 directly."
+}
 Write-Host "Engine stdout log: $EngineOutLog"
 Write-Host "Engine stderr log: $EngineErrLog"
 Write-Host "Studio stdout log: $StudioOutLog"
 Write-Host "Studio stderr log: $StudioErrLog"
 
-Watch-Studio -StudioProcess $StudioProcess -EngineProcess $EngineProcess
+Watch-Studio -StudioProcess $StudioProcess -EngineProcess $EngineProcess -EngineUsable $EngineUsable
